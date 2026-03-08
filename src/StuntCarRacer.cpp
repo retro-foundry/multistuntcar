@@ -66,6 +66,12 @@ int wideScreen = 0;
 static bool bFrameMoved = FALSE;
 static double g_logicAccumulator = 0.0;
 static double g_lastFrameTime = 0.0;
+static double g_timingWindowStart = 0.0;
+static uint64_t g_renderFramesInWindow = 0;
+static uint64_t g_logicTicksInWindow = 0;
+static uint64_t g_logicTickTotal = 0;
+static double g_renderFpsDisplay = 0.0;
+static double g_logicTickRateDisplay = 0.0;
 
 bool bShowStats = FALSE;
 bool bNewGame = FALSE;
@@ -1113,6 +1119,8 @@ void RenderText(double fTime) {
     if (bShowStats) {
         txtHelper.SetInsertionPos(static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale), 0);
         txtHelper.DrawFormattedTextLine(L"fTime: %0.1f  sin(fTime): %0.4f", fTime, sin(fTime));
+        txtHelper.DrawFormattedTextLine(L"Render FPS: %5.1f  Logic: %5.1f Hz  Tick#: %.0f", g_renderFpsDisplay,
+                                        g_logicTickRateDisplay, static_cast<double>(g_logicTickTotal));
 
 #if defined(DEBUG) || defined(_DEBUG)
         // Output VALUE1, VALUE, VALUE3
@@ -1591,6 +1599,8 @@ static bool RunFrame(double frameTime, bool allowQuit) {
 
     if (g_lastFrameTime <= 0.0)
         g_lastFrameTime = frameTime;
+    if (g_timingWindowStart <= 0.0)
+        g_timingWindowStart = frameTime;
 
     double frameDelta = frameTime - g_lastFrameTime;
     if (frameDelta < 0.0)
@@ -1604,6 +1614,8 @@ static bool RunFrame(double frameTime, bool allowQuit) {
     while (g_logicAccumulator >= LOGIC_STEP_SECONDS) {
         CapturePreviousCarState();
         OnFrameMove(&pd3dDevice, frameTime, static_cast<float>(LOGIC_STEP_SECONDS), NULL);
+        ++g_logicTicksInWindow;
+        ++g_logicTickTotal;
         if (bFrameMoved)
             anyLogicFrameMoved = true;
         g_logicAccumulator -= LOGIC_STEP_SECONDS;
@@ -1616,6 +1628,16 @@ static bool RunFrame(double frameTime, bool allowQuit) {
     }
 
     RenderCurrentFrame(frameTime, static_cast<float>(frameDelta));
+    ++g_renderFramesInWindow;
+
+    const double timingWindowElapsed = frameTime - g_timingWindowStart;
+    if (timingWindowElapsed >= 0.5) {
+        g_renderFpsDisplay = static_cast<double>(g_renderFramesInWindow) / timingWindowElapsed;
+        g_logicTickRateDisplay = static_cast<double>(g_logicTicksInWindow) / timingWindowElapsed;
+        g_renderFramesInWindow = 0;
+        g_logicTicksInWindow = 0;
+        g_timingWindowStart = frameTime;
+    }
     return run;
 }
 
@@ -1934,12 +1956,14 @@ int main(int argc, const char** argv) {
     CapturePreviousCarState();
     g_lastFrameTime = GetTimeSeconds();
     g_logicAccumulator = LOGIC_STEP_SECONDS;
+    g_timingWindowStart = g_lastFrameTime;
     emscripten_set_main_loop(em_main_loop, 0, 1);
 #else
     bool run = true;
     CapturePreviousCarState();
     g_lastFrameTime = GetTimeSeconds();
     g_logicAccumulator = LOGIC_STEP_SECONDS;
+    g_timingWindowStart = g_lastFrameTime;
     while (run) {
         run = RunFrame(GetTimeSeconds(), true);
     }
