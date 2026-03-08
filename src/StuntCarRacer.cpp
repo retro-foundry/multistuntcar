@@ -1411,7 +1411,7 @@ bool process_events() {
                 break;
 
 #if defined(DEBUG) || defined(_DEBUG)
-            case SDLK_BACK:
+            case SDLK_BACKSPACE:
                 bOutsideView = !bOutsideView;
                 break;
 #endif

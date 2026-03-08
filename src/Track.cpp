@@ -1060,7 +1060,7 @@ static void ConvertAmigaPieceY(AMIGA_PIECE_Y* amiga, COORD_Y* dest) {
     // calculate number of co-ordinates
     number = amiga->size / sizeof(char);
     yptr = (char*)amiga->amigaY;
-    if (amiga->words == TRUE) {
+    if (amiga->words != 0) {
         number /= 2; // half the number of co-ordinates, if words
         for (i = 0; i < number; i++) {
             high = *yptr++;
