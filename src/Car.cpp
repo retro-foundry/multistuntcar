@@ -942,6 +942,9 @@ void DrawCockpit(IDirect3DDevice9* pd3dDevice) {
 #endif
     // Draw Cockpit
     pd3dDevice->SetTexture(0, g_pAtlas);
+    // Cockpit should use point filtering (pixel sharp), not bilinear.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     pd3dDevice->SetStreamSource(0, pCockpitVB, 0, sizeof(TRANSFORMEDTEXVERTEX));
 
     pd3dDevice->SetFVF(D3DFVF_TRANSFORMEDTEXVERTEX);
@@ -953,6 +956,11 @@ void DrawCockpit(IDirect3DDevice9* pd3dDevice) {
 
     pd3dDevice->SetFVF(D3DFVF_TRANSFORMEDCOLVERTEX);
     pd3dDevice->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2); // 3 points per triangle
+
+    // Restore default filtering for non-cockpit atlas usage.
+    pd3dDevice->SetTexture(0, g_pAtlas);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     pd3dDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
     pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
