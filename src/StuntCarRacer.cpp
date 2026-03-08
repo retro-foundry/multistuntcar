@@ -482,6 +482,10 @@ void CreateFonts() {
     if (g_pFontLarge == NULL) {
         g_pFontLarge = TTF_OpenFont("data/DejaVuSans-Bold.ttf", 25);
     }
+    if (g_pFont == NULL || g_pFontLarge == NULL) {
+        printf("Could not load font data/DejaVuSans-Bold.ttf: %s\n", TTF_GetError());
+        exit(1);
+    }
     printf("Font created (%p / %p)\n", g_pFont, g_pFontLarge);
 }
 void CloseFonts() {

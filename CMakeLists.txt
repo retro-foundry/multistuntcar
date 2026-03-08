@@ -146,3 +146,27 @@ endif()
 set_target_properties(stuntcarracer PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
+
+if(NOT EMSCRIPTEN)
+  add_custom_target(
+    copy_runtime_data ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/data"
+            "${CMAKE_BINARY_DIR}/data"
+    COMMENT "Syncing runtime data assets to build directory"
+  )
+
+  add_dependencies(stuntcarracer copy_runtime_data)
+
+  add_custom_command(
+    TARGET stuntcarracer POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/data"
+            "$<TARGET_FILE_DIR:stuntcarracer>/data"
+    COMMENT "Copying runtime data assets to output directory"
+  )
+
+  set_target_properties(stuntcarracer PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:stuntcarracer>"
+  )
+endif()
