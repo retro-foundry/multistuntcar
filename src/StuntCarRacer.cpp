@@ -39,15 +39,10 @@
 // Defines, constants, and global variables
 //-----------------------------------------------------------------------------
 
-#ifdef linux
-#define DEFAULT_FRAME_GAP (6) // 4 Used to limit frame rate.  Amiga StuntCarRacer uses value of 6 (called MIN.FRAMES)
-#else
-#define DEFAULT_FRAME_GAP (4)
-#endif
-
 #define HEIGHT_ABOVE_ROAD (100)
 
 #define FURTHEST_Z (131072.0f)
+static const double LOGIC_STEP_SECONDS = 1.0 / 50.0;
 
 GameModeType GameMode = TRACK_MENU;
 
@@ -68,8 +63,9 @@ IDirect3DTexture9* g_pAtlas = NULL;
 
 int wideScreen = 0;
 
-static long frameGap = DEFAULT_FRAME_GAP;
 static bool bFrameMoved = FALSE;
+static double g_logicAccumulator = 0.0;
+static double g_lastFrameTime = 0.0;
 
 bool bShowStats = FALSE;
 bool bNewGame = FALSE;
@@ -114,6 +110,13 @@ static long player1_x_angle = (0 << 6), player1_y_angle = (0 << 6), player1_z_an
 static long opponent_x = 0, opponent_y = 0, opponent_z = 0;
 
 static float opponent_x_angle = 0.0f, opponent_y_angle = 0.0f, opponent_z_angle = 0.0f;
+
+// Previous logic-tick state for render interpolation
+static long prev_player1_x = 0, prev_player1_y = 0, prev_player1_z = 0;
+static long prev_player1_x_angle = 0, prev_player1_y_angle = 0, prev_player1_z_angle = 0;
+static long prev_opponent_x = 0, prev_opponent_y = 0, prev_opponent_z = 0;
+static float prev_opponent_x_angle = 0.0f, prev_opponent_y_angle = 0.0f, prev_opponent_z_angle = 0.0f;
+static bool have_prev_car_state = false;
 
 // Viewpoint 1 orientation
 static long viewpoint1_x, viewpoint1_y, viewpoint1_z;
@@ -674,50 +677,120 @@ static void CalcGameViewpoint(void) {
 //--------------------------------------------------------------------------------------
 static D3DXMATRIX matWorldTrack, matWorldCar, matWorldOpponentsCar;
 
-static void SetCarWorldTransform(void) {
+static float FixedPointToWorldCoord(long value) {
+    return static_cast<float>(value) / static_cast<float>(1 << LOG_PRECISION);
+}
+
+static float PlayerAngleToRadians(long angle) {
+    return (static_cast<float>(angle) * 2.0f * D3DX_PI) / 65536.0f;
+}
+
+static long WrappedAngleDelta(long from, long to) {
+    long delta = (to - from) & (MAX_ANGLE - 1);
+    if (delta > (MAX_ANGLE / 2))
+        delta -= MAX_ANGLE;
+    return delta;
+}
+
+static float LerpWrappedPlayerAngle(long from, long to, float alpha) {
+    const float interpolated = static_cast<float>(from) + static_cast<float>(WrappedAngleDelta(from, to)) * alpha;
+    return (interpolated * 2.0f * D3DX_PI) / 65536.0f;
+}
+
+static float NormalizeRadians(float angle) {
+    while (angle > D3DX_PI)
+        angle -= 2.0f * D3DX_PI;
+    while (angle < -D3DX_PI)
+        angle += 2.0f * D3DX_PI;
+    return angle;
+}
+
+static float LerpWrappedRadians(float from, float to, float alpha) {
+    const float delta = NormalizeRadians(to - from);
+    return from + delta * alpha;
+}
+
+static float LerpFixedCoord(long from, long to, float alpha) {
+    const float fromf = static_cast<float>(from);
+    const float tof = static_cast<float>(to);
+    return (fromf + (tof - fromf) * alpha) / static_cast<float>(1 << LOG_PRECISION);
+}
+
+static void BuildCarWorldTransform(D3DXMATRIX* out, float x, float y, float z, float xa, float ya, float za,
+                                   float yOffset) {
     D3DXMATRIX matRot, matTemp, matTrans;
 
     D3DXMatrixIdentity(&matRot);
-    float xa = ((static_cast<float>(player1_x_angle) * 2 * D3DX_PI) / 65536.0f);
-    float ya = ((static_cast<float>(player1_y_angle) * 2 * D3DX_PI) / 65536.0f);
-    float za = ((static_cast<float>(player1_z_angle) * 2 * D3DX_PI) / 65536.0f);
-    // Produce and combine the rotation matrices
     D3DXMatrixRotationZ(&matTemp, za);
     D3DXMatrixMultiply(&matRot, &matRot, &matTemp);
     D3DXMatrixRotationX(&matTemp, xa);
     D3DXMatrixMultiply(&matRot, &matRot, &matTemp);
     D3DXMatrixRotationY(&matTemp, ya);
     D3DXMatrixMultiply(&matRot, &matRot, &matTemp);
-    // Produce the translation matrix
-    // Position car slightly higher than wheel height (VCAR_HEIGHT/4) so wheels are fully visible
-    D3DXMatrixTranslation(&matTrans, static_cast<float>(player1_x >> LOG_PRECISION),
-                          static_cast<float>(-player1_y >> LOG_PRECISION) + VCAR_HEIGHT / 3,
-                          static_cast<float>(player1_z >> LOG_PRECISION));
-    // Combine the rotation and translation matrices to complete the world matrix
-    D3DXMatrixMultiply(&matWorldCar, &matRot, &matTrans);
+
+    D3DXMatrixTranslation(&matTrans, x, -y + yOffset, z);
+    D3DXMatrixMultiply(out, &matRot, &matTrans);
+}
+
+static void CapturePreviousCarState(void) {
+    prev_player1_x = player1_x;
+    prev_player1_y = player1_y;
+    prev_player1_z = player1_z;
+    prev_player1_x_angle = player1_x_angle;
+    prev_player1_y_angle = player1_y_angle;
+    prev_player1_z_angle = player1_z_angle;
+
+    prev_opponent_x = opponent_x;
+    prev_opponent_y = opponent_y;
+    prev_opponent_z = opponent_z;
+    prev_opponent_x_angle = opponent_x_angle;
+    prev_opponent_y_angle = opponent_y_angle;
+    prev_opponent_z_angle = opponent_z_angle;
+
+    have_prev_car_state = true;
+}
+
+static void UpdateInterpolatedCarTransforms(float alpha) {
+    if (!have_prev_car_state)
+        CapturePreviousCarState();
+
+    if (alpha < 0.0f)
+        alpha = 0.0f;
+    if (alpha > 1.0f)
+        alpha = 1.0f;
+
+    const float playerX = LerpFixedCoord(prev_player1_x, player1_x, alpha);
+    const float playerY = LerpFixedCoord(prev_player1_y, player1_y, alpha);
+    const float playerZ = LerpFixedCoord(prev_player1_z, player1_z, alpha);
+    const float playerXa = LerpWrappedPlayerAngle(prev_player1_x_angle, player1_x_angle, alpha);
+    const float playerYa = LerpWrappedPlayerAngle(prev_player1_y_angle, player1_y_angle, alpha);
+    const float playerZa = LerpWrappedPlayerAngle(prev_player1_z_angle, player1_z_angle, alpha);
+    BuildCarWorldTransform(&matWorldCar, playerX, playerY, playerZ, playerXa, playerYa, playerZa, VCAR_HEIGHT / 3.0f);
+
+    const float opponentX = LerpFixedCoord(prev_opponent_x, opponent_x, alpha);
+    const float opponentY = LerpFixedCoord(prev_opponent_y, opponent_y, alpha);
+    const float opponentZ = LerpFixedCoord(prev_opponent_z, opponent_z, alpha);
+    // Opponent angles come from terrain-derived instantaneous values and can wobble when
+    // interpolated as Euler angles. Keep orientation at current logic-tick value and
+    // interpolate translation only.
+    const float opponentXa = opponent_x_angle;
+    const float opponentYa = opponent_y_angle;
+    const float opponentZa = opponent_z_angle;
+    BuildCarWorldTransform(&matWorldOpponentsCar, opponentX, opponentY, opponentZ, opponentXa, opponentYa, opponentZa,
+                           VCAR_HEIGHT / 4.0f);
+}
+
+static void SetCarWorldTransform(void) {
+    BuildCarWorldTransform(&matWorldCar, FixedPointToWorldCoord(player1_x), FixedPointToWorldCoord(player1_y),
+                           FixedPointToWorldCoord(player1_z), PlayerAngleToRadians(player1_x_angle),
+                           PlayerAngleToRadians(player1_y_angle), PlayerAngleToRadians(player1_z_angle),
+                           VCAR_HEIGHT / 3.0f);
 }
 
 static void SetOpponentsCarWorldTransform(void) {
-    D3DXMATRIX matRot, matTemp, matTrans;
-
-    D3DXMatrixIdentity(&matRot);
-    //    float xa = (((float)opponent_x_angle * 2 * D3DX_PI) / 65536.0f);
-    //    float ya = (((float)opponent_y_angle * 2 * D3DX_PI) / 65536.0f);
-    //    float za = (((float)opponent_z_angle * 2 * D3DX_PI) / 65536.0f);
-    // Produce and combine the rotation matrices
-    D3DXMatrixRotationZ(&matTemp, opponent_z_angle);
-    D3DXMatrixMultiply(&matRot, &matRot, &matTemp);
-    D3DXMatrixRotationX(&matTemp, opponent_x_angle);
-    D3DXMatrixMultiply(&matRot, &matRot, &matTemp);
-    D3DXMatrixRotationY(&matTemp, opponent_y_angle);
-    D3DXMatrixMultiply(&matRot, &matRot, &matTemp);
-    // Produce the translation matrix
-    // Position car at wheel height (VCAR_HEIGHT/4)
-    D3DXMatrixTranslation(&matTrans, static_cast<float>(opponent_x >> LOG_PRECISION),
-                          static_cast<float>(-opponent_y >> LOG_PRECISION) + VCAR_HEIGHT / 4,
-                          static_cast<float>(opponent_z >> LOG_PRECISION));
-    // Combine the rotation and translation matrices to complete the world matrix
-    D3DXMatrixMultiply(&matWorldOpponentsCar, &matRot, &matTrans);
+    BuildCarWorldTransform(&matWorldOpponentsCar, FixedPointToWorldCoord(opponent_x), FixedPointToWorldCoord(opponent_y),
+                           FixedPointToWorldCoord(opponent_z), opponent_x_angle, opponent_y_angle, opponent_z_angle,
+                           VCAR_HEIGHT / 4.0f);
 }
 
 static void StopEngineSound(void) {
@@ -731,21 +804,9 @@ static void StopEngineSound(void) {
 
 void CALLBACK OnFrameMove(IDirect3DDevice9* pd3dDevice, double fTime, float fElapsedTime, void* pUserContext) {
     static D3DXVECTOR3 vUpVec(0.0f, 1.0f, 0.0f);
-    static long frameCount = 0;
     DWORD input = lastInput; // take copy of user input
     D3DXMATRIX matRot, matTemp, matTrans, matView;
-
-#ifndef linux
-    // crude 60fps cap method...
-    static float lastFrame = 0.0f;
-#define FPSMAX (1.0f / 60.f)
-    lastFrame += fElapsedTime;
-    if (lastFrame < FPSMAX)
-        return;
-    lastFrame -= FPSMAX;
-#endif
     bFrameMoved = FALSE;
-    //    VALUE3 = frameGap;
 
     if (GameMode == GAME_OVER) {
         StopEngineSound();
@@ -759,23 +820,11 @@ void CALLBACK OnFrameMove(IDirect3DDevice9* pd3dDevice, double fTime, float fEla
     if (TrackID == NO_TRACK)
         return;
 
-    // Track preview and game mode run at reduced frame rate
     if ((GameMode == TRACK_PREVIEW) || (GameMode == GAME_IN_PROGRESS)) {
         if (GameMode == GAME_IN_PROGRESS) {
-            // Following function should run at 50Hz
+            // Fixed-step engine/audio update (50Hz logic tick).
             if (!bPaused)
                 FramesWheelsEngine(EngineSoundBuffers);
-        }
-
-        if (frameCount > 0)
-            --frameCount;
-
-        if (frameCount == 0) {
-            frameCount = frameGap;
-            // pause toggling here is intentionally disabled (caused timing issues)
-        } else {
-            //if (frameCount == frameGap-1) pause on alternate frames (disabled)
-            return;
         }
     } else if (GameMode == TRACK_MENU) {
         // Stop engine sound if at track menu or if game has finished
@@ -999,7 +1048,7 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     txtHelper.DrawFormattedTextLine(L"Selected track - " STRING L".  Press 'S' to start game",
                                     (TrackID == NO_TRACK ? L"None" : GetTrackName(TrackID)));
     txtHelper.DrawTextLine(L"'M' for track menu, Escape to quit");
-    txtHelper.DrawTextLine(L"(Press F4 to change scenery, F9 / F10 to adjust frame rate)");
+    txtHelper.DrawTextLine(L"(Press F4 to change scenery)");
 
     txtHelper.SetInsertionPos(static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale),
                               static_cast<int>(pd3dsdBackBuffer->Height - 15 * 6 * textScale));
@@ -1405,15 +1454,6 @@ bool process_events() {
                 bOpponentPaused = !bOpponentPaused;
                 break;
 
-            case SDLK_F9:
-                if (frameGap > 1)
-                    frameGap--;
-                break;
-
-            case SDLK_F10:
-                frameGap++;
-                break;
-
 #if defined(DEBUG) || defined(_DEBUG)
             case SDLK_BACKSPACE:
                 bOutsideView = !bOutsideView;
@@ -1532,28 +1572,57 @@ IDirect3DDevice9 pd3dDevice;
 SDL_Window* window = NULL;
 #endif
 
-#ifdef __EMSCRIPTEN__
-extern "C" void initialize_gl4es();
-double fLastTime;
-void em_main_loop() {
+static void RenderCurrentFrame(double frameTime, float frameDelta) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    double fTime = GetTimeSeconds();
-    process_events(); // no quit...
-    OnFrameMove(&pd3dDevice, fTime, fTime - fLastTime, NULL);
-    OnFrameRender(&pd3dDevice, fTime, fTime - fLastTime, NULL);
+    OnFrameRender(&pd3dDevice, frameTime, frameDelta, NULL);
 #ifdef USE_SDL2
     SDL_GL_SwapWindow(window);
 #else
     SDL_GL_SwapBuffers();
 #endif
+}
 
-    int32_t timetowait = (1.0f / 50.0f - (fTime - fLastTime)) * 1000;
-    //int32_t timetowait = (1.0f/60.0f - (fTime-fLastTime))*1000;
-    if (timetowait > 0)
-        SDL_Delay(timetowait);
+static bool RunFrame(double frameTime, bool allowQuit) {
+    bool run = true;
+    if (allowQuit)
+        run = process_events();
+    else
+        process_events();
 
-    fLastTime = fTime;
+    if (g_lastFrameTime <= 0.0)
+        g_lastFrameTime = frameTime;
+
+    double frameDelta = frameTime - g_lastFrameTime;
+    if (frameDelta < 0.0)
+        frameDelta = 0.0;
+    if (frameDelta > 0.25)
+        frameDelta = 0.25;
+    g_lastFrameTime = frameTime;
+    g_logicAccumulator += frameDelta;
+
+    bool anyLogicFrameMoved = false;
+    while (g_logicAccumulator >= LOGIC_STEP_SECONDS) {
+        CapturePreviousCarState();
+        OnFrameMove(&pd3dDevice, frameTime, static_cast<float>(LOGIC_STEP_SECONDS), NULL);
+        if (bFrameMoved)
+            anyLogicFrameMoved = true;
+        g_logicAccumulator -= LOGIC_STEP_SECONDS;
+    }
+    bFrameMoved = anyLogicFrameMoved;
+
+    if ((GameMode == TRACK_PREVIEW) || (GameMode == GAME_IN_PROGRESS)) {
+        const float alpha = static_cast<float>(g_logicAccumulator / LOGIC_STEP_SECONDS);
+        UpdateInterpolatedCarTransforms(alpha);
+    }
+
+    RenderCurrentFrame(frameTime, static_cast<float>(frameDelta));
+    return run;
+}
+
+#ifdef __EMSCRIPTEN__
+extern "C" void initialize_gl4es();
+void em_main_loop() {
+    RunFrame(GetTimeSeconds(), false);
 }
 #endif
 
@@ -1862,30 +1931,17 @@ int main(int argc, const char** argv) {
 
     glClearColor(0, 0, 0, 1);
 #ifdef __EMSCRIPTEN__
-    fLastTime = GetTimeSeconds();
+    CapturePreviousCarState();
+    g_lastFrameTime = GetTimeSeconds();
+    g_logicAccumulator = LOGIC_STEP_SECONDS;
     emscripten_set_main_loop(em_main_loop, 0, 1);
 #else
     bool run = true;
-    double fLastTime = GetTimeSeconds();
+    CapturePreviousCarState();
+    g_lastFrameTime = GetTimeSeconds();
+    g_logicAccumulator = LOGIC_STEP_SECONDS;
     while (run) {
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        double fTime = GetTimeSeconds();
-        run = process_events();
-        OnFrameMove(&pd3dDevice, fTime, fTime - fLastTime, NULL);
-        OnFrameRender(&pd3dDevice, fTime, fTime - fLastTime, NULL);
-#ifdef USE_SDL2
-        SDL_GL_SwapWindow(window);
-#else
-        SDL_GL_SwapBuffers();
-#endif
-
-        int32_t timetowait = (1.0f / 50.0f - (fTime - fLastTime)) * 1000;
-        //int32_t timetowait = (1.0f/60.0f - (fTime-fLastTime))*1000;
-        if (timetowait > 0)
-            SDL_Delay(timetowait);
-
-        fLastTime = fTime;
+        run = RunFrame(GetTimeSeconds(), true);
     }
 #endif
     FreeData();
