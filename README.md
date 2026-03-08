@@ -6,11 +6,24 @@ This is a port to Linux & OpenPandora of Stunt Car Racer Remake, a windows remak
 
 ## Building
 
-To build on Linux, simply use `make LINUX=1`
-For ODroid it will be `make ODROID=1`
-and for PocketCHIP: `make CHIP=1`
-a simple `make` will build for Pandora.
-Also, you can also use SDL2 instead of SDL1, by adding `SDL=2` to the make command (so SDL2 Linux is `make LINUX=1 SDL=2`)
+This project now uses CMake and an out-of-source build in `build/`.
+
+### Linux
+
+```bash
+cmake -S . -B build -DSTUNT_USE_SDL2=ON
+cmake --build build -j
+```
+
+### Windows (Visual Studio Generator)
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release
+```
+
+If your Windows environment does not provide `d3dx9` and `dxerr` automatically, set
+`-DDXSDK_DIR="C:/Path/To/Microsoft DirectX SDK (June 2010)"` when configuring.
 
 You can play Emscripten version, built using [gl4es](https://github.com/ptitSeb/gl4es) here: [Web version](http://ptitseb.github.io/stuntcarremake/)
 

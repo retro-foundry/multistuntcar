@@ -17,4 +17,11 @@ StuntCarRacer_2008.VC.VC.opendb
 *.user
 .vs/
 .vscode/
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+compile_commands.json
+stuntcarracer.dir/
 SCRlog.txt
