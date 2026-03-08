@@ -2,9 +2,7 @@
 #ifndef	_CAR
 #define	_CAR
 
-#ifdef linux
 #include "dx_linux.h"
-#endif
 
 /*	========= */
 /*	Constants */

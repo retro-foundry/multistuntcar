@@ -7,13 +7,19 @@ This is a port to Linux & OpenPandora of Stunt Car Racer Remake, a windows remak
 ## Building
 
 This project now uses CMake and an out-of-source build in `build/`.
+Rendering is SDL2 + OpenGL on desktop and web (Emscripten), with SDL audio.
 
-### Linux
+### Desktop (Linux/Windows/macOS with SDL2)
 
 ```bash
-cmake -S . -B build -DSTUNT_USE_SDL2=ON
+cmake -S . -B build
 cmake --build build -j
 ```
+
+Requirements:
+- SDL2
+- SDL2_ttf
+- OpenGL development headers/libraries
 
 ### Windows (Visual Studio Generator)
 
@@ -22,16 +28,13 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-If your Windows environment does not provide `d3dx9` and `dxerr` automatically, set
-`-DDXSDK_DIR="C:/Path/To/Microsoft DirectX SDK (June 2010)"` when configuring.
-
 You can play Emscripten version, built using [gl4es](https://github.com/ptitSeb/gl4es) here: [Web version](http://ptitseb.github.io/stuntcarremake/)
 
-Some code (the OpenAL part) come from Forsaken/ProjectX port by chino.
+Some of the original sound-loading code came from Forsaken/ProjectX port work by chino.
 
-## Windows-Specific Features 
+## Display Features 
 
-The Windows build includes additional features not available on Linux:
+The SDL desktop build supports:
 
 ### Dynamic Window Resizing
 - **Resizable window** with automatic aspect ratio preservation (16:10 for widescreen, 4:3 for standard)
@@ -40,14 +43,10 @@ The Windows build includes additional features not available on Linux:
 - **Intelligent positioning** - UI elements maintain proper positioning at any resolution
 
 **Technical Details:**
-- Implemented via Win32 `WM_SIZING` message handler
-- Uses DirectX backbuffer dimensions for accurate scaling calculations
 - Base resolutions: 800x480 (widescreen) or 640x480 (standard)
 - All scaling factors calculated dynamically from current vs base resolution
 
-**Linux Status:** Linux builds use fixed resolution (800x480 or 640x480) as the SDL implementation does not currently support dynamic resizing. The scaling code is present but inactive (returns 1.0x scale) to maintain compatibility.
-
-**Contributors:** Windows enhancements by omenoid <akaunist@gmail.com> (2025-11-30)
+**Contributors:** Dynamic scaling enhancements by omenoid <akaunist@gmail.com> (2025-11-30)
 
 ## Controls
 

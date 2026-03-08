@@ -1,4 +1,4 @@
-#include "dxstdafx.h"
+#include "dx_linux.h"
 
 #include "XBOXController.h"
 
@@ -16,7 +16,6 @@ XINPUT_STATE CXBOXController::GetState()
 
 	// Get the state
 	#ifdef linux
-#warning TODO...
 	_controllerState = 0;
 	#else
 	XInputGetState(_controllerNum, &_controllerState);
@@ -32,7 +31,6 @@ bool CXBOXController::IsConnected()
 
 	// Get the state
 	#ifdef linux
-#warning TODO
 	DWORD Result = 0xFFFF;
 	#else
 	DWORD Result = XInputGetState(_controllerNum, &_controllerState);
@@ -48,11 +46,12 @@ bool CXBOXController::IsConnected()
 	}
 }
 
-void CXBOXController::Vibrate(const unsigned short leftVal, const unsigned short rightVal)
-{
-	#ifdef linux
-#warning TODO
-	#else
+	void CXBOXController::Vibrate(const unsigned short leftVal, const unsigned short rightVal)
+	{
+		#ifdef linux
+		(void)leftVal;
+		(void)rightVal;
+		#else
 	// Create a Vibraton State
 	XINPUT_VIBRATION Vibration;
 

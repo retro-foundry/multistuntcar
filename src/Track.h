@@ -6,9 +6,7 @@
 /*	Include files */
 /*	============= */
 #include "3D_Engine.h"
-#ifdef linux
 #include "dx_linux.h"
-#endif
 
 /*	========= */
 /*	Constants */

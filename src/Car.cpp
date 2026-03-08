@@ -7,7 +7,7 @@
 /*	============= */
 /*	Include files */
 /*	============= */
-#include "dxstdafx.h"
+#include "dx_linux.h"
 
 #include "Car.h"
 #include "StuntCarRacer.h"

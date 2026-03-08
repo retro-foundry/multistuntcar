@@ -1,15 +1,12 @@
 //--------------------------------------------------------------------------------------
 // File: StuntCarRacer.cpp
 //
-// NOTE: This project builds with Microsoft Visual C++ 2008 Express Edition and requires
-// Microsoft DirectX SDK (April 2007).  It is based on examples from that DirectX SDK.
+// SDL/OpenGL runtime entry and game loop.
 //
 // Copyright (c) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
-#include "dxstdafx.h"
-
-#include "resource.h"
+#include "dx_linux.h"
 
 #include "StuntCarRacer.h"
 #include "3D_Engine.h"
@@ -22,8 +19,14 @@
 #include "Atlas.h"
 #include "version.h"
 
-#ifdef linux
+#if defined(linux) && !defined(_WIN32)
 #include <unistd.h>
+#elif defined(_WIN32)
+#include <direct.h>
+#define chdir _chdir
+#endif
+
+#ifdef linux
 #define STRING "%S"
 #else
 #define STRING L"%s"
@@ -2136,17 +2139,13 @@ int main(int argc, const char** argv)
 	char maintitle[50] = {0};
 	sprintf(maintitle, "StuntCarRemake v%d.%02d.%02d", V_MAJOR, V_MINOR, V_PATCH);
 	printf("%s\n", maintitle);
-	// get executable folder and cd into it...
-	// this is linux only, will not work on BSD or macOS
-	char buf[500];
-	ssize_t bufsized = readlink("/proc/self/exe", buf, sizeof(buf));
-	if(bufsized>0) {
-		char* p = strrchr(buf, '/');
-		if(*p) {
-			*p=0;
-			chdir(buf);
-			printf("chdir(\"%s\")\n", buf);
-		}
+	// Run from the executable directory so relative assets (Bitmap/Sounds/Tracks) resolve.
+	char* basePath = SDL_GetBasePath();
+	if (basePath && basePath[0] != '\0')
+	{
+		if (chdir(basePath) == 0)
+			printf("chdir(\"%s\")\n", basePath);
+		SDL_free(basePath);
 	}
 #ifdef USE_SDL2
 	SDL_GLContext context = NULL;

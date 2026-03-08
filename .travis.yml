@@ -7,15 +7,16 @@ compiler:
 
 #Build steps
 before_install:
-    - sudo apt-get install libsdl-mixer1.2-dev libsdl-image1.2-dev libsdl-ttf2.0-dev libopenal-dev libglm-dev -y
+    - sudo apt-get install libsdl2-dev libsdl2-ttf-dev libglm-dev -y
 
 script: 
-  - make LINUX=1
+  - cmake -S . -B build
+  - cmake --build build -j
   # prepare the package
   - mkdir -p appdir/usr
   - mkdir appdir/usr/bin
   - mkdir appdir/usr/lib
-  - cp stuntcarracer appdir/usr/bin/
+  - cp build/stuntcarracer appdir/usr/bin/
   - cp DejaVuSans*.ttf appdir/usr/bin/
   - cp -r Bitmap appdir/usr/bin/
   - cp -r Sounds appdir/usr/bin/

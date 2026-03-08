@@ -43,7 +43,7 @@
 /*	============= */
 /*	Include files */
 /*	============= */
-#include "dxstdafx.h"
+#include "dx_linux.h"
 
 #include <stdlib.h>
 
@@ -786,7 +786,7 @@ static void CarControl (DWORD input)
 
 	// if none of the resulting keys are pressed then read joystick
 #ifdef linux
-#warning TODO
+	// SDL gamepad integration placeholder.
 #else
 	if( !input )
 	{

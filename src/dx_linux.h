@@ -7,6 +7,7 @@
 #endif
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -19,8 +20,11 @@
 #include <SDL/SDL_ttf.h>
 #include <SDL/SDL_image.h>
 #endif
-#include <AL/al.h>
 #include <wchar.h>
+
+#if defined(_WIN32)
+#define wcscasecmp _wcsicmp
+#endif
 #define USEGLM
 #ifdef USEGLM
 #define GLM_FORCE_RADIANS

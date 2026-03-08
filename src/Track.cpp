@@ -10,7 +10,7 @@
 /*	============= */
 /*	Include files */
 /*	============= */
-#include "dxstdafx.h"
+#include "dx_linux.h"
 
 #include "Track.h"
 #include "StuntCarRacer.h"

@@ -72,16 +72,6 @@ void IDirect3DTexture9::LoadTexture(const char* name)
 }
 
 
-struct sound_buffer_t {
-	ALuint id;
-};
-
-struct sound_source_t {
-	ALuint id;
-	ALuint buffer;
-	bool playing;
-};
-
 sound_buffer_t * sound_load(void* data, int size, int bits, int sign, int channels, int freq);
 sound_source_t * sound_source( sound_buffer_t * buffer );
 void sound_play( sound_source_t * s );
@@ -167,7 +157,6 @@ HRESULT IDirectSoundBuffer8::SetPan(LONG lPan)
 {
 	if (!source)
 		return DSERR_GENERIC;
-#warning TODO: conversion lPan to OpenAL panning
 	sound_pan(source, lPan); 
 	return DS_OK;
 }
@@ -521,7 +510,7 @@ HRESULT IDirect3DDevice9::GetTransform(D3DTRANSFORMSTATETYPE State, D3DXMATRIX* 
 		case D3DTS_TEXTURE2:
 		case D3DTS_TEXTURE3:
 		case D3DTS_TEXTURE4:
-			#warning TODO change active texture...
+			// TODO: select active texture stage before returning the matrix.
 			*pMatrix = mText;
 			break;
 		default:
