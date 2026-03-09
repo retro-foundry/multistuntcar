@@ -395,12 +395,11 @@ void DrawCockpit(RenderDevice* pDevice) {
         const int engineframes[8] = {0, 0, 0, 1, 2, 2, 2, 1};
         engineFrame = eEngineFlames0 + engineframes[frame >> 1];
     }
-    if (wideScreen) {
-        AddQuad(pVertices, 0.0f + offsetX, COCKPIT_WLEFT_Y_OFFSET * 2.4f * scaleY, COCKPIT_WLEFT_X_OFFSET * 2.f * scaleX + offsetX,
-                480.0f * scaleY, 0.9f, (bSuperLeague) ? eCockpitWL2 : eCockpitWL, 0, 1);
-        AddQuad(pVertices, (800.f - COCKPIT_WRIGHT_X_OFFSET) * scaleX + offsetX, COCKPIT_WRIGHT_Y_OFFSET * 2.4f * scaleY,
-                800.f * scaleX + offsetX, 480.0f * scaleY, 0.9f, (bSuperLeague) ? eCockpitWR2 : eCockpitWR, 0, 1);
-    }
+    /* Always draw extra side pieces (atlas eCockpitWL/eCockpitWR) to extend cockpit to the sides */
+    AddQuad(pVertices, 0.0f, COCKPIT_WLEFT_Y_OFFSET * 2.4f * scaleY, Wide * 2.f * scaleX + offsetX, 480.0f * scaleY,
+            0.9f, (bSuperLeague) ? eCockpitWL2 : eCockpitWL, 0, 1);
+    AddQuad(pVertices, offsetX + (640.0f + Wide * 2.f) * scaleX, COCKPIT_WRIGHT_Y_OFFSET * 2.4f * scaleY, projWidth, 480.0f * scaleY,
+            0.9f, (bSuperLeague) ? eCockpitWR2 : eCockpitWR, 0, 1);
     AddQuad(pVertices, (Wide + COCKPIT_ENGINE_X_OFFSET) * 2.0f * scaleX + offsetX, COCKPIT_ENGINE_Y_OFFSET * 2.4f * scaleY,
             (Wide + COCKPIT_ENGINE_X_OFFSET + COCKPIT_ENGINE_WIDTH) * 2.0f * scaleX + offsetX,
             (COCKPIT_ENGINE_Y_OFFSET + COCKPIT_ENGINE_HEIGHT) * 2.4f * scaleY, 0.89f, engineFrame, 0, 1);
