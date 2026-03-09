@@ -34,7 +34,7 @@
   </head>
   <body>
     <div class="emscripten">
-      <canvas class="game portrait" oncontextmenu="event.preventDefault()"></canvas>
+      <canvas id="canvas" class="game portrait" oncontextmenu="event.preventDefault()"></canvas>
       <div class="loading">Loading...</div>
     </div>
     <script type="text/javascript">
@@ -47,12 +47,13 @@
         }
         var Module = {
             print(text) {
-            console.log(Array.prototype.slice.call(arguments).join(' '));
+                console.log(Array.prototype.slice.call(arguments).join(' '));
             },
             printErr() {
-            console.error(Array.prototype.slice.call(arguments).join(' '));
+                console.error(Array.prototype.slice.call(arguments).join(' '));
             },
-            canvas: $game
+            canvas: document.getElementById('canvas') || $game,
+            noStdioInit: true
         };
         window.addEventListener('resize', resize, false);
         resize();

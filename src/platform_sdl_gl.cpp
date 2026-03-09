@@ -62,7 +62,8 @@ void GpuTexture::LoadTexture(const char* name) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, intfmt, w2, h2, 0, fmt, GL_UNSIGNED_BYTE, NULL);
+    // Use fmt for internal format: WebGL only allows GL_RGB/GL_RGBA/GL_ALPHA/GL_LUMINANCE/GL_LUMINANCE_ALPHA
+    glTexImage2D(GL_TEXTURE_2D, 0, fmt, w2, h2, 0, fmt, GL_UNSIGNED_BYTE, NULL);
     // simple and hugly way to make the texture upside down...
     int pitch = y * n;
     for (int i = 0; i < h; i++) {
@@ -770,10 +771,23 @@ TextHelper::TextHelper(TTF_Font* font, GLuint sprite, int size) : m_sprite(sprit
             SDL_Surface* surf = TTF_RenderText_Blended(font, text, forecol);
             if (surf) {
                 m_as[i * 16 + j] = surf->w;
+                int subh = (surf->h >= m_fontsize) ? m_fontsize - 1 : surf->h;
+#ifdef __EMSCRIPTEN__
+                // WebGL 1 does not support GL_UNPACK_ROW_LENGTH; use tight buffer when pitch differs.
+                int rowBytes = surf->w * surf->format->BytesPerPixel;
+                if (surf->pitch != rowBytes && subh > 0) {
+                    unsigned char* tight = (unsigned char*)malloc((size_t)rowBytes * subh);
+                    for (int row = 0; row < subh; row++)
+                        memcpy(tight + (size_t)row * rowBytes, (const char*)surf->pixels + (size_t)row * surf->pitch, (size_t)rowBytes);
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, j * m_fontsize, i * m_fontsize, surf->w, subh, GL_RGBA, GL_UNSIGNED_BYTE, tight);
+                    free(tight);
+                } else
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, j * m_fontsize, i * m_fontsize, surf->w, subh, GL_RGBA, GL_UNSIGNED_BYTE, surf->pixels);
+#else
                 glPixelStorei(GL_UNPACK_ROW_LENGTH, surf->pitch / surf->format->BytesPerPixel);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, j * m_fontsize, i * m_fontsize, surf->w,
-                                (surf->h >= m_fontsize) ? m_fontsize - 1 : surf->h, GL_RGBA, GL_UNSIGNED_BYTE,
-                                surf->pixels);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, j * m_fontsize, i * m_fontsize, surf->w, subh, GL_RGBA, GL_UNSIGNED_BYTE, surf->pixels);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
                 SDL_FreeSurface(surf);
             } else {
                 m_as[i * 16 + j] = m_fontsize / 2;
