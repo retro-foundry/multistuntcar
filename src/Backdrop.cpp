@@ -43,7 +43,7 @@ static void DrawHorizon(long viewpoint_y, long viewpoint_x_angle, long viewpoint
 static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint_y_angle, long viewpoint_z_angle);
 
 static long BuildGroundPlanePolygon(long x1, long y1, long x2, long y2, long screen_width, long screen_height,
-                                    long upside_down, POINT* out_points);
+                                    long upside_down, long clip_bottom_y, POINT* out_points);
 
 static long ClipLine(long* x1ptr, long* y1ptr, long* x2ptr, long* y2ptr, long screen_width, long screen_height);
 
@@ -210,13 +210,20 @@ static void DrawHorizon(long viewpoint_y, long viewpoint_x_angle, long viewpoint
         long sides;
 
         /* Sky: the half of the screen on the "sky" side of the horizon line */
-        sides = BuildGroundPlanePolygon(x1, y1, x2, y2, screen_width, screen_height, !upside_down, points);
+        sides = BuildGroundPlanePolygon(x1, y1, x2, y2, screen_width, screen_height, !upside_down, -1, points);
         if (sides >= 3) {
             SetTextureColour(SKY_COLOUR);
             DrawPolygon(points, sides);
         }
-        /* Ground: the half on the "ground" side (from horizon down to bottom), so backdrop meets ground plane */
-        sides = BuildGroundPlanePolygon(x1, y1, x2, y2, screen_width, screen_height, upside_down, points);
+        /* Ground: the half on the "ground" side; limit how far below the horizon it extends when camera is angled down */
+        {
+            long horizon_bottom = (y1 > y2) ? y1 : y2;
+            long ground_extent = (long)(screen_height * 0.35f);
+            long clip_bottom = horizon_bottom + ground_extent;
+            if (clip_bottom > screen_height - 1)
+                clip_bottom = screen_height - 1;
+            sides = BuildGroundPlanePolygon(x1, y1, x2, y2, screen_width, screen_height, upside_down, clip_bottom, points);
+        }
         if (sides >= 3) {
             SetTextureColour(GROUND_COLOUR);
             DrawPolygon(points, sides);
@@ -579,7 +586,7 @@ static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint
 }
 
 static long BuildGroundPlanePolygon(long x1, long y1, long x2, long y2, long screen_width, long screen_height,
-                                    long upside_down, POINT* out_points) {
+                                    long upside_down, long clip_bottom_y, POINT* out_points) {
     typedef struct {
         float x;
         float y;
@@ -599,14 +606,19 @@ static long BuildGroundPlanePolygon(long x1, long y1, long x2, long y2, long scr
     const float ref_y = upside_down ? 0.0f : static_cast<float>(screen_height - 1);
     const bool keep_positive = ((a * ref_x) + (b * ref_y) + c) >= 0.0f;
 
+    /* When clip_bottom_y >= 0, limit the bottom of the clip rect so ground doesn't extend too far below the horizon */
+    const float bottom_y = (clip_bottom_y >= 0)
+        ? (float)(clip_bottom_y < screen_height - 1 ? clip_bottom_y : screen_height - 1)
+        : static_cast<float>(screen_height - 1);
+
     input[0].x = 0.0f;
     input[0].y = 0.0f;
     input[1].x = static_cast<float>(screen_width - 1);
     input[1].y = 0.0f;
     input[2].x = static_cast<float>(screen_width - 1);
-    input[2].y = static_cast<float>(screen_height - 1);
+    input[2].y = bottom_y;
     input[3].x = 0.0f;
-    input[3].y = static_cast<float>(screen_height - 1);
+    input[3].y = bottom_y;
 
     for (i = 0; i < input_count; ++i) {
         const FPOINT s = input[i];
