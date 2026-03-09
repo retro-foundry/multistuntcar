@@ -100,6 +100,10 @@ int npot(int n) {
 IDirectSoundBuffer8::IDirectSoundBuffer8() {
     source = NULL;
     buffer = NULL;
+    wav_bits = 8;
+    wav_sign = 0;
+    wav_channels = 1;
+    wav_freq = 11025;
 }
 
 HRESULT IDirectSoundBuffer8::SetVolume(LONG lVolume) {
@@ -139,6 +143,10 @@ HRESULT IDirectSoundBuffer8::GetCurrentPosition(LPDWORD pdwCurrentPlayCursor, LP
     if (pdwCurrentPlayCursor)
         *pdwCurrentPlayCursor = sound_get_position(source);
     return DS_OK;
+}
+
+bool IDirectSoundBuffer8::IsPlaying() const {
+    return source ? sound_is_playing(source) : false;
 }
 
 HRESULT IDirectSoundBuffer8::Stop() {
@@ -187,7 +195,7 @@ HRESULT IDirectSoundBuffer8::Unlock(LPVOID pvAudioPtr1, DWORD dwAudioBytes1, LPV
         return E_FAIL;
     if (source || buffer)
         Release();
-    buffer = sound_load(pvAudioPtr1, dwAudioBytes1, 8, 0, 1, 11025);
+    buffer = sound_load(pvAudioPtr1, dwAudioBytes1, wav_bits, wav_sign, wav_channels, wav_freq);
     source = sound_source(buffer);
     free(pvAudioPtr1);
     return S_OK;
@@ -196,6 +204,13 @@ HRESULT IDirectSoundBuffer8::Unlock(LPVOID pvAudioPtr1, DWORD dwAudioBytes1, LPV
 HRESULT IDirectSound8::CreateSoundBuffer(LPCDSBUFFERDESC pcDSBufferDesc, LPDIRECTSOUNDBUFFER* ppDSBuffer,
                                          LPUNKNOWN pUnkOuter) {
     IDirectSoundBuffer8* tmp = new IDirectSoundBuffer8();
+    if (pcDSBufferDesc && pcDSBufferDesc->lpwfxFormat) {
+        LPWAVEFORMATEX wfx = pcDSBufferDesc->lpwfxFormat;
+        tmp->wav_bits = (int)wfx->wBitsPerSample;
+        tmp->wav_sign = (wfx->wBitsPerSample == 16) ? 1 : 0;
+        tmp->wav_channels = (int)wfx->nChannels;
+        tmp->wav_freq = (int)wfx->nSamplesPerSec;
+    }
     *ppDSBuffer = tmp;
     return S_OK;
 }

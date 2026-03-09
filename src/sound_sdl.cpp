@@ -133,7 +133,7 @@ bool sound_init(void) {
     desired.samples = 256;
     desired.callback = audio_callback;
 
-    g_audio_device = SDL_OpenAudioDevice(NULL, 0, &desired, &g_audio_spec, SDL_AUDIO_ALLOW_SAMPLES_CHANGE);
+    g_audio_device = SDL_OpenAudioDevice(NULL, 0, &desired, &g_audio_spec, 0);
     if (g_audio_device == 0) {
         printf("SDL audio init failed: %s\n", SDL_GetError());
         return false;
@@ -193,8 +193,12 @@ void sound_position(sound_source_t* source, float x, float y, float z, float min
     if (!source) {
         return;
     }
+    if (sound_initialized && g_audio_device != 0)
+        SDL_LockAudioDevice(g_audio_device);
     float denom = (max > min) ? max : 1.0f;
     source->pan = clampf(x / denom, -1.0f, 1.0f);
+    if (sound_initialized && g_audio_device != 0)
+        SDL_UnlockAudioDevice(g_audio_device);
 }
 
 void sound_set_pitch(sound_source_t* source, float pitch) {
@@ -226,15 +230,23 @@ void sound_volume(sound_source_t* source, long millibels) {
     if (!source) {
         return;
     }
+    if (sound_initialized && g_audio_device != 0)
+        SDL_LockAudioDevice(g_audio_device);
     millibels = (millibels > 0) ? 0 : millibels;
     source->volume = static_cast<float>(pow(10.0, millibels / 2000.0));
+    if (sound_initialized && g_audio_device != 0)
+        SDL_UnlockAudioDevice(g_audio_device);
 }
 
 void sound_pan(sound_source_t* source, long pan) {
     if (!source) {
         return;
     }
+    if (sound_initialized && g_audio_device != 0)
+        SDL_LockAudioDevice(g_audio_device);
     source->pan = clampf(static_cast<float>(pan) / 10000.0f, -1.0f, 1.0f);
+    if (sound_initialized && g_audio_device != 0)
+        SDL_UnlockAudioDevice(g_audio_device);
 }
 
 void sound_play(sound_source_t* source) {
@@ -270,7 +282,13 @@ bool sound_is_playing(sound_source_t* source) {
     if (!source) {
         return false;
     }
-    return source->playing;
+    bool playing;
+    if (sound_initialized && g_audio_device != 0)
+        SDL_LockAudioDevice(g_audio_device);
+    playing = source->playing;
+    if (sound_initialized && g_audio_device != 0)
+        SDL_UnlockAudioDevice(g_audio_device);
+    return playing;
 }
 
 void sound_set_position(sound_source_t* source, long newpos) {

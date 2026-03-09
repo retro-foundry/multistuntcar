@@ -1966,8 +1966,10 @@ static void CarCollisionDetection(void) {
     GroundedSoundBuffer->SetVolume(AmigaVolumeToMixerGain(amiga_volume));
 
     if (grounded_delay == 0) {
-        //GroundedSoundBuffer->SetCurrentPosition(0);
-        GroundedSoundBuffer->Play(NULL, NULL, NULL); // not looping
+        if (!GroundedSoundBuffer->IsPlaying()) {
+            GroundedSoundBuffer->SetCurrentPosition(0);
+            GroundedSoundBuffer->Play(NULL, NULL, NULL); // not looping
+        }
         grounded_delay = 5;
     }
 
@@ -3703,9 +3705,11 @@ static void DrawDustClouds(void) {
     if (!touching_road)
         return;
 
-    //    OffRoadSoundBuffer->Stop();
-    //    OffRoadSoundBuffer->SetCurrentPosition(0);
-    OffRoadSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    /* Only start the sound when not already playing, so we don't restart it every tick */
+    if (!OffRoadSoundBuffer->IsPlaying()) {
+        OffRoadSoundBuffer->SetCurrentPosition(0);
+        OffRoadSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    }
 }
 
 /*    ======================================================================================= */
@@ -3753,8 +3757,11 @@ on_an_edge:
     if (!touching_road)
         return;
 
-    //    WreckSoundBuffer->SetCurrentPosition(0);
-    WreckSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    /* Only start the sound when not already playing, so we don't restart it every tick */
+    if (!WreckSoundBuffer->IsPlaying()) {
+        WreckSoundBuffer->SetCurrentPosition(0);
+        WreckSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    }
 }
 
 /*    ======================================================================================= */
@@ -3798,8 +3805,10 @@ void UpdateDamage(void) {
     smashed_countdown = 69;
 
     // Play smash sound effect
-    //SmashSoundBuffer->SetCurrentPosition(0);
-    SmashSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    if (!SmashSoundBuffer->IsPlaying()) {
+        SmashSoundBuffer->SetCurrentPosition(0);
+        SmashSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    }
     return;
 
 PlayCreakSound:
@@ -3811,8 +3820,10 @@ PlayCreakSound:
         amiga_volume = 64;
 
     CreakSoundBuffer->SetVolume(AmigaVolumeToMixerGain(amiga_volume));
-    //CreakSoundBuffer->SetCurrentPosition(0);
-    CreakSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    if (!CreakSoundBuffer->IsPlaying()) {
+        CreakSoundBuffer->SetCurrentPosition(0);
+        CreakSoundBuffer->Play(NULL, NULL, NULL); // not looping
+    }
     return;
 }
 

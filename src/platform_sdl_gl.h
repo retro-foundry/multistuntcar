@@ -424,6 +424,11 @@ class IDirectSoundBuffer8 {
   public:
     sound_source_t* source;
     sound_buffer_t* buffer;
+    /* WAV format for Unlock(); set by CreateSoundBuffer from DSBUFFERDESC.lpwfxFormat */
+    int wav_bits;
+    int wav_sign;
+    int wav_channels;
+    int wav_freq;
     IDirectSoundBuffer8();
     ~IDirectSoundBuffer8();
 
@@ -432,6 +437,7 @@ class IDirectSoundBuffer8 {
     HRESULT SetFrequency(DWORD dwFrequency);
     HRESULT SetCurrentPosition(DWORD dwNewPosition);
     HRESULT GetCurrentPosition(LPDWORD pdwCurrentPlayCursor, LPDWORD pdwCurrentWriteCursor);
+    bool IsPlaying() const;
     HRESULT Stop();
     HRESULT SetPan(LONG lPan);
     HRESULT Release();
