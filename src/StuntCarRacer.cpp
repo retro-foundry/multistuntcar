@@ -1198,7 +1198,7 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
            << L".  Press Enter or A to start game";
         txtHelper.DrawFormattedTextLine(ss.str());
     }
-    txtHelper.DrawTextLine(L"'M', B or Escape = back to track menu");
+    txtHelper.DrawTextLine(L"'M', Select or Escape = back to track menu");
     txtHelper.DrawTextLine(L"(Press F4 to change scenery)");
 
     txtHelper.SetInsertionPos(static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale),
@@ -1213,7 +1213,7 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     txtHelper.DrawTextLine(L"Gamepad controls :-");
     txtHelper.DrawTextLine(L"  Left stick/D-Pad = Steer, RT = Accelerate, LT or B = Brake, A/X/RB = Boost");
     txtHelper.DrawTextLine(L"  R = Point car in opposite direction, P = Pause, O = Unpause");
-    txtHelper.DrawTextLine(L"  M, B or Escape = Back to track menu");
+    txtHelper.DrawTextLine(L"  M, Select or Escape = Back to track menu");
 
     if (keyPress == STARTMENU) {
         RestartEngineAudioBuffers(true);
@@ -1837,8 +1837,8 @@ bool process_events() {
         case SDL_CONTROLLERBUTTONDOWN: {
             const Uint8 btn = event.cbutton.button;
             const bool inMenu = (GameMode == TRACK_MENU || GameMode == TRACK_PREVIEW || GameMode == GAME_OVER);
-            /* B or Select (Back) = back to menu during race */
-            if ((btn == SDL_CONTROLLER_BUTTON_B || btn == SDL_CONTROLLER_BUTTON_BACK) && GameMode == GAME_IN_PROGRESS) {
+            /* Select (Back) only = back to menu during race; B is brake and must not exit */
+            if (btn == SDL_CONTROLLER_BUTTON_BACK && GameMode == GAME_IN_PROGRESS) {
                 GameMode = TRACK_MENU;
                 g_restartEngineAudioOnFirstInput = false;
                 opponentsID = NO_OPPONENT;
