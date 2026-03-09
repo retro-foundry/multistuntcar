@@ -292,19 +292,7 @@ glm::mat4* mat4LookAt(glm::mat4* pOut, const glm::vec3* pEye, const glm::vec3* p
     glm::vec3 eye = *pEye;
     glm::vec3 at = *pAt;
     glm::vec3 up = *pUp;
-#if 0
-    // checked, same as DX9
-    glm::vec3 vZ = glm::normalize(at - eye);
-    glm::vec3 vX = glm::normalize(glm::cross(up, vZ));
-    glm::vec3 vY = glm::cross(vZ, vX);
-
-    *pOut = glm::mat4(    vX.x,            vY.x,            vZ.x,            0.0f,
-                        vX.y,            vY.y,            vZ.y,            0.0f,
-                        vX.z,            vY.z,            vZ.z,            0.0f,
-                        glm::dot(-vX, eye), glm::dot(-vY, eye),    glm::dot(-vZ, eye),    1.0f);
-#else
     *pOut = glm::lookAt(eye, at, up);
-#endif
 #else
     matrix_lookat((float*)pEye, (float*)pAt, (float*)pUp, pOut->m);
 #endif
@@ -313,43 +301,10 @@ glm::mat4* mat4LookAt(glm::mat4* pOut, const glm::vec3* pEye, const glm::vec3* p
 
 glm::mat4* mat4PerspectiveFov(glm::mat4* pOut, float fovy, float Aspect, float zn, float zf) {
 #ifdef USEGLM
-#if 0
-    float yScale = 1.0f / tanf(fovy/2.0f);
-    float xScale = yScale / Aspect;
-    float right = -xScale, left = +xScale;
-    float top = -yScale, bottom = +yScale;
-
-    float x1 = ( 2 * zn ) / ( right - left );
-    float z1 = ( right + left ) / ( right - left );
- 
-    float y2 = ( 2 * zn ) / ( top - bottom );
-    float z2 = ( top + bottom ) / ( top - bottom );
- 
-    float z3 = -( zf + zn ) / ( zf - zn );
-    float w3 = -( 2 * zf * zn ) / ( zf - zn );
- 
-    *pOut = glm::mat4(
-        x1,  0.f,   z1, 0.f,
-        0.f,  y2,   z2, 0.f,
-        0.f, 0.f,   z3,  w3,
-        0.f, 0.f, -1.f, 0.f );
-#else
     float fw, fh;
     fh = tanf(fovy / 2.0f) * zn;
     fw = fh * Aspect;
     *pOut = glm::frustum(-fw, +fw, +fh, -fh, zn, zf);
-#endif
-    //*pOut = glm::perspective(fovy, Aspect, zn, zf);
-#else
-#if 0
-     float yScale = 1.0f / tanf(fovy/2.0f);
-     float xScale = yScale / Aspect;
-    float nf = zn - zf;
-    pOut->m[0+ 0] = xScale;
-    pOut->m[1+ 4] = yScale;
-    pOut->m[2+ 8] = (zf+zn)/nf;
-    pOut->m[3+ 8] = -1.0f;
-    pOut->m[2+12] = 2*zf*zn/nf;
 #else
     const float ymax = zn * tanf(fovy * 0.5f);
     const float xmax = ymax * Aspect;
@@ -904,5 +859,3 @@ DOUBLE GetTimeSeconds() { return ((DOUBLE)SDL_GetTicks()) / 1000.0; }
 void ResetRenderEnvironment() {
     // NOTHING?
 }
-
-#endif

@@ -284,13 +284,6 @@ static void DrawSparks(void);
 static void SetWheelRotationSpeed();
 void ResetEngineAudioState(void);
 
-#ifdef NOT_USED
-static void RewindRecording(void);
-static void Record(DWORD input);
-static void PlayBack(DWORD* input);
-static void ReadRecordedFile(void);
-#endif
-
 #ifdef USE_AMIGA_RECORDING
 static bool OpenAmigaRecording(void);
 #endif
@@ -491,37 +484,11 @@ void CarBehaviour(DWORD input, long* x, long* y, long* z, long* x_angle, long* y
 #endif
         }
 
-#ifdef NOT_USED
-        if (ReplayRequested) {
-            // begin action replay if requested
-            Replay = TRUE;
-        }
-#endif
-
         off_track_count = 0;
         //        ReplayRequested = FALSE;
     }
 
     //VALUE1 = Replay;
-
-#ifdef NOT_USED
-    // replay doesn't currently work on DrawBridge - doesn't know starting DrawBridge frame
-
-    if (ReplayFinished) {
-        if (ReplayLooping) {
-            RewindRecording();
-            ReplayRequested = TRUE;
-        }
-        return;
-    }
-
-    if (!Replay) {
-        Record(input);
-    } else {
-        // override user input with recorded value
-        PlayBack(&input);
-    }
-#endif
 
     CarControl(input);
     CarMovement();
@@ -604,11 +571,6 @@ void LimitViewpointY(long* y) {
         front_right_actual_height -= (static_cast<long>(sin_z) << (3+15-LOG_PRECISION));
         front_right_actual_height >>= 8;
         */
-#if 0
-        if (bTestKey)
-            ry = front_right_road_height << 8;
-        else
-#endif
         ry = (front_right_road_height - Y_ADJUSTMENT_THRESHOLD) << 8;
 
         ry += (static_cast<long>(sin_z) << (3 + 15 - LOG_PRECISION));
@@ -626,11 +588,6 @@ void LimitViewpointY(long* y) {
         front_left_actual_height += (static_cast<long>(sin_z) << (3+15-LOG_PRECISION));
         front_left_actual_height >>= 8;
         */
-#if 0
-        if (bTestKey)
-            ly = front_left_road_height << 8;
-        else
-#endif
         ly = (front_left_road_height - Y_ADJUSTMENT_THRESHOLD) << 8;
 
         ly -= (static_cast<long>(sin_z) << (3 + 15 - LOG_PRECISION));
@@ -958,103 +915,6 @@ static void CalculateWheelXZOffsets(void) {
     // but calculate.actual.wheel.heights doesn't use components
     return;
 }
-
-#ifdef NOT_USED
-void TempCentrePoint(long* x, long* y, long* z) {
-    *x = player_x;
-    *y = player_y;
-    *z = player_z;
-}
-
-void TempRearPoint(long* x, long* y, long* z) {
-    *x = player_x + rear_wheel_x_offset;
-    //*y = player_y;
-
-    *y = (((-rear_actual_height / 32) << LOG_PRECISION) * PC_FACTOR);
-    *z = player_z + rear_wheel_z_offset;
-}
-
-void TempFrontLeftPoint(long* x, long* y, long* z) {
-    *x = player_x + front_left_wheel_x_offset;
-    //*y = player_y;
-
-    *y = (((-front_left_actual_height / 32) << LOG_PRECISION) * PC_FACTOR);
-    *z = player_z + front_left_wheel_z_offset;
-}
-
-void TempFrontRightPoint(long* x, long* y, long* z) {
-    *x = player_x + front_right_wheel_x_offset;
-    //*y = player_y;
-
-    *y = (((-front_right_actual_height / 32) << LOG_PRECISION) * PC_FACTOR);
-    *z = player_z + front_right_wheel_z_offset;
-}
-
-void StuntCarRearWheelXZ(long* x, long* z) {
-    CalcYXZTrigCoefficients(player_x_angle, player_y_angle, player_z_angle);
-
-    CalculateWheelXZOffsets();
-
-    *x = rear_wheel_x_offset + player_x;
-    *z = rear_wheel_z_offset + player_z;
-}
-
-void StuntCarFrontLeftWheelXZ(long* x, long* z) {
-    // must have previously called StuntCarRearWheelXZ
-
-    *x = front_left_wheel_x_offset + player_x;
-    *z = front_left_wheel_z_offset + player_z;
-}
-
-void StuntCarFrontRightWheelXZ(long* x, long* z) {
-    // must have previously called StuntCarRearWheelXZ
-
-    *x = front_right_wheel_x_offset + player_x;
-    *z = front_right_wheel_z_offset + player_z;
-}
-
-void StuntCarWheelXZ(long piece, long segment, long scrx, long scrz, long* x, long* z) {
-    long x1, x2, x3, x4;
-    long z1, z2, z3, z4;
-    long sxa, sxb, sx;
-    long sza, szb, sz;
-
-    x1 = Track[piece].coords[(segment * 4)].x;
-    z1 = Track[piece].coords[(segment * 4)].z;
-
-    x2 = Track[piece].coords[(segment * 4) + 1].x;
-    z2 = Track[piece].coords[(segment * 4) + 1].z;
-
-    segment++;
-    x3 = Track[piece].coords[(segment * 4)].x;
-    z3 = Track[piece].coords[(segment * 4)].z;
-
-    x4 = Track[piece].coords[(segment * 4) + 1].x;
-    z4 = Track[piece].coords[(segment * 4) + 1].z;
-
-    // first do x interpolation
-    //fprintf(out, "x1 %d, x2 %d, x3 %d, x4 %d\n", x1, x2, x3, x4);
-    //fprintf(out, "scrx %d, scrz %d\n", scrx, scrz);
-
-    sxa = (x1 << LOG_SURFACE_SIZE) + (scrx * (x2 - x1));
-    sxb = (x3 << LOG_SURFACE_SIZE) + (scrx * (x4 - x3));
-
-    sza = (z1 << LOG_SURFACE_SIZE) + (scrx * (z2 - z1));
-    szb = (z3 << LOG_SURFACE_SIZE) + (scrx * (z4 - z3));
-
-    // now do z interpolation
-    sx = (sxa << (LOG_PRECISION - LOG_SURFACE_SIZE)) +
-         ((scrz * (sxb - sxa)) >> ((LOG_SURFACE_SIZE * 2) - LOG_PRECISION));
-    //fprintf(out, "sx %d\n", sx);
-
-    sz = (sza << (LOG_PRECISION - LOG_SURFACE_SIZE)) +
-         ((scrz * (szb - sza)) >> ((LOG_SURFACE_SIZE * 2) - LOG_PRECISION));
-
-    // add x/z position of piece's front left corner, within world
-    *x = sx + (Track[piece].x << LOG_CUBE_SIZE);
-    *z = sz + (Track[piece].z << LOG_CUBE_SIZE);
-}
-#endif
 
 /*    ======================================================================================= */
 /*    Function:        CalculateRoadWheelHeights                                                */
@@ -3880,122 +3740,6 @@ void UpdateLapData(void) {
         }
     }
 }
-
-#ifdef NOT_USED
-/*    ======================================================================================= */
-/*    Function:        RewindRecording,                                                        */
-/*                    Record,                                                                    */
-/*                    PlayBack,                                                                */
-/*                    BeginActionReplay                                                        */
-/*                                                                                            */
-/*    Description:                */
-/*    ======================================================================================= */
-
-#define RECORDING_SIZE (4096)
-
-typedef struct {
-    BYTE input; // this is sufficient to hold required input
-} RECORDING;
-
-static size_t RecordingIndex, EndOfRecording; // indexes into following buffer
-static RECORDING RecordingBuffer[RECORDING_SIZE];
-
-static void RewindRecording(void) { RecordingIndex = 0; }
-
-static void Record(DWORD input) {
-    if (RecordingIndex < RECORDING_SIZE) {
-        RecordingBuffer[RecordingIndex].input = (BYTE)input;
-        ++RecordingIndex;
-    }
-
-    //VALUE2 = RecordingIndex;
-}
-
-static void PlayBack(DWORD* input) {
-    if (RecordingIndex < EndOfRecording) {
-        *input = static_cast<DWORD>(RecordingBuffer[RecordingIndex].input);
-        ++RecordingIndex;
-    } else {
-        *input = 0;
-        RewindRecording();
-        Replay = FALSE;
-        ReplayFinished = TRUE;
-    }
-
-    //VALUE2 = RecordingIndex;
-}
-
-static void WriteRecordingToFile(void) {
-    char filename[80];
-    FILE* f;
-    size_t i, size;
-
-    sprintf(filename, "Track%dRecording.bin", TrackID);
-
-    if ((f = fopen(filename, "wb")) == NULL) // write, binary
-    {
-        fprintf(out, "Can't open %s\n", filename);
-        return;
-    }
-
-    size = EndOfRecording;
-    if ((i = fwrite(RecordingBuffer, sizeof(RECORDING), size, f)) != size) {
-        fprintf(out, "Can't write %s correctly (%d)\n", filename, i);
-        fclose(f);
-        return;
-    }
-
-    fclose(f);
-    return;
-}
-
-static void ReadRecordingFromFile(void) {
-    char filename[80];
-    errno_t err;
-    FILE* in_file;
-    size_t i;
-
-    memset(RecordingBuffer, 0, sizeof(RecordingBuffer));
-
-    sprintf_s(filename, sizeof(filename), "Track%dRecording.bin", TrackID);
-
-    if ((err = fopen_s(&in_file, filename, "rb")) != 0) // read, binary
-    {
-        fprintf(out, "Can't open %s\n", filename);
-        return;
-    }
-
-    i = fread(RecordingBuffer, sizeof(char), RECORDING_SIZE, in_file);
-    if (i == 0) {
-        fprintf(out, "Can't read %s correctly (%d)\n", filename, i);
-        fclose(in_file);
-        return;
-    }
-    EndOfRecording = i;
-
-    fclose(in_file);
-    return;
-}
-
-// request replay of last game
-void RequestGameReplay(void) {
-    EndOfRecording = RecordingIndex;
-    //    note - think this function has a bug WriteRecordingToFile();
-    RewindRecording();
-    ReplayRequested = TRUE;
-
-    ReplayLooping = FALSE;
-}
-
-// request replay of pre-recorded game
-void RequestStoredReplay(void) {
-    ReadRecordingFromFile();
-    RewindRecording();
-    ReplayRequested = TRUE;
-
-    ReplayLooping = TRUE;
-}
-#endif
 
 #ifdef USE_AMIGA_RECORDING
 /*    ======================================================================================= */

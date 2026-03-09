@@ -23,9 +23,6 @@ extern long VALUE1, VALUE2;
 /*    ========= */
 /*    Constants */
 /*    ========= */
-//#define    FALSE    0
-//#define    TRUE    1
-
 #define SIN_COS_TABLE_SIZE MAX_ANGLE + (MAX_ANGLE / 4) // makes use of sine/cosine overlap
 
 /*    =========== */
@@ -50,9 +47,15 @@ static COORD_3D* Transformed_Coords = Default_Transformed_Coords;
 static COORD_2D Default_Screen_Coords[MAX_COORDS]; // could use POINT structure
 static COORD_2D* Screen_Coords = Default_Screen_Coords;
 
-#ifdef NOT_USED
-long TEMPZ[MAX_POLY_SIDES];
-#endif
+static long TEMPZ[MAX_POLY_SIDES];
+
+struct TRANSFORMEDVERTEX {
+    FLOAT x, y, z, rhw;
+    DWORD color;
+};
+#define FVF_TRANSFORMEDVERTEX (FVF_XYZRHW | FVF_DIFFUSE)
+
+static void SetTextureVectors(float, float, float, float, float, float, float, float, float) {}
 
 /*    ===================== */
 /*    Function declarations */
@@ -91,41 +94,6 @@ void GetSinCos(long angle, short* sin, short* cos) {
     *cos = Sin_Cos[angle + (MAX_ANGLE / 4)];
 }
 
-#ifdef NOT_USED
-/*    ======================================================================================= */
-/*    Function:        SetWorldOffset                                                            */
-/*                                                                                            */
-/*    Description:    Set World X, Y and Z offsets needed for 3D transformation                */
-/*    ======================================================================================= */
-
-void SetWorldOffset(long x_offset, long y_offset, long z_offset) {
-    World_X_Offset = x_offset;
-    World_Y_Offset = y_offset;
-    World_Z_Offset = z_offset;
-}
-
-/*    ======================================================================================= */
-/*    Function:        SetCoords                                                                */
-/*                                                                                            */
-/*    Description:    Set the locations to be used for subsequent graphic operations            */
-/*    ======================================================================================= */
-
-void SetCoords(COORD_3D* tptr, COORD_2D* sptr) {
-    Transformed_Coords = tptr;
-    Screen_Coords = sptr;
-}
-
-/*    ======================================================================================= */
-/*    Function:        DefaultCoords                                                            */
-/*                                                                                            */
-/*    Description:    Default the locations to be used for subsequent graphic operations        */
-/*    ======================================================================================= */
-
-void DefaultCoords(void) {
-    Transformed_Coords = Default_Transformed_Coords;
-    Screen_Coords = Default_Screen_Coords;
-}
-#endif
 /*    ======================================================================================= */
 /*    Function:        CalcYXZTrigCoefficients                                                    */
 /*                                                                                            */
@@ -202,24 +170,6 @@ short* TrigCoefficients(void) { return (Trig_Coeffs); }
 /*                                                                                            */
 /*    Description:    Perform 3D rotation on supplied co-ordinate                                */
 /*    ======================================================================================= */
-#ifdef NOT_USED
-void RotateCoordinate(long* xptr, long* yptr, long* zptr) {
-    long x, y, z;
-
-    x = *xptr;
-    y = *yptr;
-    z = *zptr;
-
-    *xptr = (x * static_cast<long>(Trig_Coeffs[X_X_COMP])) + (y * static_cast<long>(Trig_Coeffs[X_Y_COMP])) +
-            (z * static_cast<long>(Trig_Coeffs[X_Z_COMP]));
-
-    *yptr = (x * static_cast<long>(Trig_Coeffs[Y_X_COMP])) + (y * static_cast<long>(Trig_Coeffs[Y_Y_COMP])) +
-            (z * static_cast<long>(Trig_Coeffs[Y_Z_COMP]));
-
-    *zptr = (x * static_cast<long>(Trig_Coeffs[Z_X_COMP])) + (y * static_cast<long>(Trig_Coeffs[Z_Y_COMP])) +
-            (z * static_cast<long>(Trig_Coeffs[Z_Z_COMP]));
-}
-#endif
 /*    ======================================================================================= */
 /*    Function:        WorldOffset (opposite of RotateCoordinate)                                */
 /*                                                                                            */
@@ -242,82 +192,6 @@ void WorldOffset(long* xptr, long* yptr, long* zptr) {
 
     *zptr = (x * static_cast<long>(Trig_Coeffs[X_Z_COMP])) + (y * static_cast<long>(Trig_Coeffs[Y_Z_COMP])) +
             (z * static_cast<long>(Trig_Coeffs[Z_Z_COMP]));
-}
-
-/*    ======================================================================================= */
-/*    Function:        TransformCoordinates                                                    */
-/*                                                                                            */
-/*    Description:    Perform 3D rotation and translation on required co-ordinates            */
-/*    ======================================================================================= */
-#ifdef NOT_USED
-long TransformCoordinates(COORD_3D* cptr, long size) {
-    long i, number;
-    long x, y, z;
-    long trans_x, trans_y, trans_z;
-    long screen_width, screen_height;
-
-    // calculate number of co-ordinates
-    number = size / sizeof(COORD_3D);
-
-    // finish if too many co-ordinates
-    if (number > MAX_COORDS)
-        return (FALSE);
-
-    GetScreenDimensions(&screen_width, &screen_height);
-
-    // transform each co-ordinate in turn
-    for (i = 0; i < number; i++) {
-        x = cptr->x;
-        y = cptr->y;
-        z = cptr->z;
-        cptr++;
-
-        // rotate current co-ordinate
-        trans_x = (x * static_cast<long>(Trig_Coeffs[X_X_COMP])) + (y * static_cast<long>(Trig_Coeffs[X_Y_COMP])) +
-                  (z * static_cast<long>(Trig_Coeffs[X_Z_COMP]));
-
-        trans_y = (x * static_cast<long>(Trig_Coeffs[Y_X_COMP])) + (y * static_cast<long>(Trig_Coeffs[Y_Y_COMP])) +
-                  (z * static_cast<long>(Trig_Coeffs[Y_Z_COMP]));
-
-        trans_z = (x * static_cast<long>(Trig_Coeffs[Z_X_COMP])) + (y * static_cast<long>(Trig_Coeffs[Z_Y_COMP])) +
-                  (z * static_cast<long>(Trig_Coeffs[Z_Z_COMP]));
-
-        // add world offsets
-        trans_x += World_X_Offset;
-        trans_y += World_Y_Offset;
-        trans_z += World_Z_Offset;
-
-        // finish if any z negative (i.e. infront of screen)
-        if (trans_z <= 0)
-            return (FALSE);
-
-        // store world x, world y and world z
-        Transformed_Coords[i].x = trans_x;
-        Transformed_Coords[i].y = trans_y;
-        Transformed_Coords[i].z = trans_z;
-
-        // perspective projection
-        z = trans_z >> LOG_FOCUS;
-
-        // debug stuff
-        if (z == 0) {
-#if defined(DEBUG) || defined(_DEBUG)
-            fprintf(out, "5.  Preventing division by zero\n");
-            //Sleep(10);
-#endif
-
-            z = 1;
-        }
-
-        x = (trans_x / z) + screen_width / 2;
-        y = (trans_y / z) + screen_height / 2;
-
-        // store screen x and screen y
-        Screen_Coords[i].x = x;
-        Screen_Coords[i].y = y;
-    }
-
-    return (TRUE);
 }
 
 /*    ======================================================================================= */
@@ -514,9 +388,7 @@ void Line(long c1, // co-ordinate offset for line, point 1
     for (i = 0; i < sides; i++) {
         TLVertices[i].sz = static_cast<float>(300.0); // not needed unless Z buffering
         TLVertices[i].rhw = static_cast<float>(1.0);  // shouldn't be texture mapping a line
-
         TLVertices[i].color = Line_Colour;
-        TLVertices[i].specular = RGB_MAKE(0, 0, 0);
     }
 
     // texture vectors not needed, as again, shouldn't be texture mapping a line
@@ -777,9 +649,7 @@ void LineZClipped(long c1, // co-ordinate offset for line, point 1
     for (i = 0; i < sides; i++) {
         TLVertices[i].sz = static_cast<float>(300.0); // not needed unless Z buffering
         TLVertices[i].rhw = static_cast<float>(1.0);  // shouldn't be texture mapping a line
-
         TLVertices[i].color = Line_Colour;
-        TLVertices[i].specular = RGB_MAKE(0, 0, 0);
     }
 
     // texture vectors not needed, as again, shouldn't be texture mapping a line
@@ -852,7 +722,6 @@ void ZClip(COORD_3D* below, // transformed co-ordinate below boundary (i.e. near
     *x = screenx;
     *y = screeny;
 }
-#endif
 /*    ======================================================================================= */
 /*    Function:        LockViewpointToTarget                                                    */
 /*                                                                                            */
@@ -936,12 +805,6 @@ static long LockAngle(long opposite, long adjacent, long clockwise) {
 /*                                                                                            */
 /*    Description:    Functions to draw polygon and filled rectangle using Direct3D            */
 /*    ======================================================================================= */
-
-struct TRANSFORMEDVERTEX {
-    FLOAT x, y, z, rhw; // The transformed position for the vertex.
-    DWORD color;        // The vertex color.
-};
-#define FVF_TRANSFORMEDVERTEX (FVF_XYZRHW | FVF_DIFFUSE)
 
 static VertexBuffer* pPolygonVB = NULL;
 

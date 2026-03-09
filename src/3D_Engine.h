@@ -66,21 +66,11 @@ extern void CreateSinCosTable(void);
 
 extern void GetSinCos(long angle, short* sin, short* cos);
 
-extern void SetWorldOffset(long x_offset, long y_offset, long z_offset);
-
-extern void SetCoords(COORD_3D* tptr, COORD_2D* sptr);
-
-extern void DefaultCoords(void);
-
 extern void CalcYXZTrigCoefficients(long x_angle, long y_angle, long z_angle);
 
 extern short* TrigCoefficients(void);
 
-extern void RotateCoordinate(long* xptr, long* yptr, long* zptr);
-
 extern void WorldOffset(long* xptr, long* yptr, long* zptr);
-
-extern long TransformCoordinates(COORD_3D* cptr, long size);
 
 extern long TransformedZ(long offset);
 

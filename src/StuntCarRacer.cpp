@@ -492,39 +492,6 @@ void SetLineColour(long colour_index) { Line_Colour = SCRGB(colour_index); }
 
 void SetTextureColour(long colour_index) { Fill_Colour = SCRGB(colour_index); }
 
-#ifdef NOT_USED
-/*    ======================================================================================= */
-/*    Function:        EnforceConstantFrameRate                                                */
-/*                                                                                            */
-/*    Description:    Attempt to keep frame rate close to MAX_FRAME_RATE                        */
-/*    ======================================================================================= */
-
-static void EnforceConstantFrameRate(long max_frame_rate) {
-    static long first_time = TRUE;
-
-    static DWORD last_time_ms;
-    DWORD this_time_ms, frame_time_ms;
-    DWORD min_frame_time_ms = (1000 / max_frame_rate);
-    long remaining_ms; // use long because it is signed (DWORD isn't)
-
-    if (first_time) {
-        first_time = FALSE;
-        last_time_ms = timeGetTime();
-    } else {
-        this_time_ms = timeGetTime();
-        frame_time_ms = this_time_ms - last_time_ms;
-
-        remaining_ms = static_cast<long>(min_frame_time_ms) - static_cast<long>(frame_time_ms);
-        last_time_ms = this_time_ms;
-        if (remaining_ms > 0) {
-            Sleep(remaining_ms);
-            last_time_ms += static_cast<DWORD>(remaining_ms);
-        }
-    }
-    return;
-}
-#endif
-
 //--------------------------------------------------------------------------------------
 // Global variables
 //--------------------------------------------------------------------------------------
@@ -1395,74 +1362,6 @@ void RenderText(double fTime) {
     //    VALUE2 = raceFinished ? 1 : 0;
     //    VALUE3 = (long)gameEndTime;
 }
-
-#ifdef NOT_USED
-//-----------------------------------------------------------------------------
-// Name: SetupLights()
-// Desc: Sets up the lights and materials for the scene (OpenGL).
-//-----------------------------------------------------------------------------
-struct LightDesc { int Type; glm::vec3 Position, Direction; float Range; float Diffuse[4]; };
-struct MaterialDesc { float Diffuse[4], Ambient[4]; };
-void SetupLights(RenderDevice* pDevice) {
-    glm::vec3 vecDir;
-    LightDesc light;
-
-    MaterialDesc mtrl;
-    ZeroMemory(&mtrl, sizeof(MaterialDesc));
-    mtrl.Diffuse[0] = mtrl.Ambient[0] = 1.0f;
-    mtrl.Diffuse[1] = mtrl.Ambient[1] = 1.0f;
-    mtrl.Diffuse[2] = mtrl.Ambient[2] = 1.0f;
-    mtrl.Diffuse[3] = mtrl.Ambient[3] = 1.0f;
-    (void)pDevice; (void)mtrl; /* SetMaterial not in RenderDevice */
-
-    /*
-    // Set up a white spotlight
-    ZeroMemory( &light, sizeof(LightDesc) );
-    light.Type       = 3; /* spot */
-    light.Diffuse.r  = 1.0f;
-    light.Diffuse.g  = 1.0f;
-    light.Diffuse.b  = 1.0f;
-    // Set position vector
-//    light.Position = glm::vec3(32768.0f, 1000.0f, 32768.0f);
-    if (GameMode == TRACK_MENU)
-    {
-        light.Position.x = 32768.0f;
-        light.Position.y = 16384.0f;
-        light.Position.z = 32768.0f;
-    }
-    else
-    {
-        light.Position.x = (player1_x>>LOG_PRECISION);
-        light.Position.y = 16384.0f;
-        light.Position.z = (player1_z>>LOG_PRECISION);
-    }
-    // Set direction vector to simulate sunlight
-    vecDir = glm::vec3(0.0f, -1.0f, 0.0f);
-    light.Direction = glm::normalize(vecDir);
-    light.Range       = 32768;//((float)sqrt(FLT_MAX));
-    light.Falloff = 1.0f;
-    light.Attenuation0 = 1.0f;
-    light.Attenuation1 = 0.0f;
-    light.Attenuation2 = 0.0f;
-    light.Theta = PI/3;
-    light.Phi = PI/2;
-    pDevice->SetLight( 0, &light );
-    pDevice->LightEnable( 0, TRUE );
-    */
-
-    // Set up four directional lights (OpenGL would use glLight*)
-    ZeroMemory(&light, sizeof(LightDesc));
-    light.Type = 2; /* directional */
-    light.Diffuse[0] = light.Diffuse[1] = light.Diffuse[2] = 0.33f; light.Diffuse[3] = 1.0f;
-    light.Range = 10000.0f;
-    light.Direction = glm::normalize(glm::vec3(0.2f, -0.7f, 0.5f));
-    light.Direction = glm::normalize(glm::vec3(0.2f, -0.7f, -0.5f));
-    light.Direction = glm::normalize(glm::vec3(-0.2f, -0.7f, 0.5f));
-    light.Direction = glm::normalize(glm::vec3(-0.2f, -0.7f, -0.5f));
-    pDevice->SetRenderState(RS_AMBIENT, 0x00303030);
-    pDevice->SetRenderState(RS_LIGHTING, TRUE);
-}
-#endif
 
 //--------------------------------------------------------------------------------------
 // Render the scene

@@ -65,9 +65,6 @@ extern void ResetLapData(long car);
 extern void UpdateLapData(void);
 
 #ifdef USE_AMIGA_RECORDING
-extern void RequestGameReplay(void);
-extern void RequestStoredReplay(void);
-
 // Following only used for testing against Amiga
 extern bool GetRecordedAmigaWord(long* value_out);
 extern bool GetRecordedAmigaLong(long* value_out);
