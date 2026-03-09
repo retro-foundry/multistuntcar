@@ -26,7 +26,9 @@
 #define AMIGA_PAL_HZ (3546895)
 
 #define REDUCTION 238 // (238/256)
-#define INCREASE 276  // (276/256)
+#define INCREASE 276  // (276/256) - kept for opponent physics; player uses PhysicsConfig.h
+
+#include "PhysicsConfig.h"
 
 typedef enum { OPPONENT = 0, PLAYER, NUM_CARS } CarType;
 

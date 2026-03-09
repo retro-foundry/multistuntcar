@@ -248,7 +248,8 @@ static void CalculateXZSpeeds(void);
 static void CalculateGravityAcceleration(void);
 static void CarCollisionDetection(void);
 static void CalculateWheelCollision(long road_height, long actual_height, long* height_difference_out,
-                                    long* old_difference_in_out, long* amount_below_road_in_out, long* damage_in_out);
+                                    long* old_difference_in_out, long* amount_below_road_in_out, long* damage_in_out,
+                                    long spring, long damping);
 static void CalculateCarCollisionAcceleration(long average_amount_below_road);
 static void CalculateInclinationSinCos(long inclination_in, long* inclination_sin_out, long* inclination_cos_out);
 static void LiftCarOntoTrack(void);
@@ -1744,15 +1745,18 @@ static void CarCollisionDetection(void) {
 
     // Front left wheel collision
     CalculateWheelCollision(front_left_road_height, front_left_actual_height, &front_left_height_difference,
-                            &old_front_left_difference, &front_left_amount_below_road, &front_left_damage);
+                            &old_front_left_difference, &front_left_amount_below_road, &front_left_damage,
+                            FRONT_SUSPENSION_SPRING, FRONT_SUSPENSION_DAMPING);
 
     // Front right wheel collision
     CalculateWheelCollision(front_right_road_height, front_right_actual_height, &front_right_height_difference,
-                            &old_front_right_difference, &front_right_amount_below_road, &front_right_damage);
+                            &old_front_right_difference, &front_right_amount_below_road, &front_right_damage,
+                            FRONT_SUSPENSION_SPRING, FRONT_SUSPENSION_DAMPING);
 
     // Rear wheel collision
     CalculateWheelCollision(rear_road_height, rear_actual_height, &rear_height_difference, &old_rear_difference,
-                            &rear_amount_below_road, &rear_damage);
+                            &rear_amount_below_road, &rear_damage,
+                            REAR_SUSPENSION_SPRING, REAR_SUSPENSION_DAMPING);
 
     //****************************************
 
@@ -1837,7 +1841,8 @@ static void CarCollisionDetection(void) {
 }
 
 static void CalculateWheelCollision(long road_height, long actual_height, long* height_difference_out,
-                                    long* old_difference_in_out, long* amount_below_road_in_out, long* damage_in_out) {
+                                    long* old_difference_in_out, long* amount_below_road_in_out, long* damage_in_out,
+                                    long spring, long damping) {
     long new_difference;
     long amount_below_road, old_amount_below_road;
     long damage;
@@ -1851,8 +1856,9 @@ static void CalculateWheelCollision(long road_height, long actual_height, long* 
         new_difference = -0x300;
 
     amount_below_road = new_difference - *old_difference_in_out;
-    // 21/05/1998 - '/ 256' changed to '>> 8', to match Amiga StuntCarRacer exactly
-    amount_below_road = ((amount_below_road * INCREASE) >> 8) + new_difference;
+    /* spring scales the velocity term (rate of penetration change = damping feedback);
+       damping scales the position term (current penetration depth = spring stiffness). */
+    amount_below_road = ((amount_below_road * spring) >> 8) + ((new_difference * damping) >> 8);
 
     if (amount_below_road >= 0) {
         old_amount_below_road = *amount_below_road_in_out;

@@ -1755,11 +1755,11 @@ ctccd2:
     if (d0 > 8)
         goto ctccd4;
 
-    d0 = 0x800;
+    d0 = WALL_CONTACT_IMPULSE;
     if (player_to_right)
         goto ctccd3;
 
-    d0 = -0x800;
+    d0 = -WALL_CONTACT_IMPULSE;
 
 ctccd3:
     car_to_car_x_acceleration = d0;
@@ -1833,7 +1833,7 @@ void CarToCarCollision(void) {
         d0 = 0;
     opponents_z_speed = d0;
 
-    d0 = car_to_car_y_acceleration >> 4;
+    d0 = car_to_car_y_acceleration >> WALL_CONTACT_DAMPING;
     opp_y_speed[REAR_LEFT] -= d0;
     opp_y_speed[REAR_RIGHT] -= d0;
     opp_y_speed[FRONT] -= d0;
