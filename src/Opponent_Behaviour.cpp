@@ -1014,7 +1014,7 @@ static void OpponentMovement(void) {
 
 // Tested against Amiga
 static void UpdateOpponentsActualWheelHeights(void) {
-    long height_adjust, touching_road, total_diff, i, acceleration, speed;
+    long height_adjust, touching_road, total_diff, acceleration, speed;
 
     opp_smallest_difference = -32768;
 
@@ -1100,15 +1100,12 @@ static void UpdateOpponentsActualWheelHeights(void) {
     s_wheelie_step_count++;
     if (s_wheelie_step_count >= wheelie_period)
         s_wheelie_step_count = 0;
+    // Original: randomly make opponent do a wheelie if they have that attribute.
+    // Check once per reference period so rate is ~7 Hz regardless of physics Hz.
     if ((opponent_attributes[opponentsID] & WHEELIE) && (s_wheelie_step_count == 0)) {
-        // Original condition: (speed | accel) & 0xfffc == 0 (both in [0..3]).
-        // At high Hz, raw opp_y_acceleration is ~1/g_physicsStepScale times larger even at rest
-        // (because increase_effective is scaled up), so only check speed here.
-        if ((opp_y_speed[FRONT] & 0xfffc) == 0) // If front of car isn't moving much vertically
-        {
-            i = rand() & 0xf;
-            if (i == 0)
-                opp_y_speed[FRONT] = 160; // Make opponent do a wheelie
+        if ((opp_y_speed[FRONT] & 0xfffc) == 0) { // Original: front not moving much vertically
+            if ((rand() & 0xf) == 0) // Original: 1-in-16 chance
+                opp_y_speed[FRONT] = 160; // Original impulse; no dt-scaling needed (integrates correctly at any Hz)
         }
     }
 
