@@ -48,7 +48,7 @@
 #define FURTHEST_Z (131072.0f)
 /* Perspective depth range: keep near/far ratio modest to avoid depth-buffer precision loss and z-fighting */
 #define PERSPECTIVE_NEAR (5.0f)
-#define PERSPECTIVE_FAR  (131072.0f)
+#define PERSPECTIVE_FAR  (262144.0f)
 /* Overlapping split ranges for depth partitioning (far pass first, then near pass). */
 #define PERSPECTIVE_NEAR_PASS_FAR (8000.0f)
 #define PERSPECTIVE_FAR_PASS_NEAR (2000.0f)
@@ -1453,6 +1453,7 @@ static void RenderWorldGeometry(RenderDevice* pDevice) {
     // Draw Track
     pDevice->SetTransform(TS_WORLD, &matWorldTrack);
     DrawGroundPlane(pDevice);
+    DrawBackdropScenery3D(pDevice);
     DrawTrack(pDevice);
 
     switch (GameMode) {

@@ -12,6 +12,7 @@
 #include "StuntCarRacer.h"
 #include "Backdrop.h"
 #include "3D_Engine.h"
+#include "Track.h"
 
 /*    ===== */
 /*    Debug */
@@ -34,13 +35,18 @@ extern FILE* out;
 /*    Static data */
 /*    =========== */
 static long current_scenery_type = MAX_SCENERY_TYPE;
+static VertexBuffer* pScenery3DVB = NULL;
+static long scenery3DVertexCount = 0;
+static long scenery3DBuiltType = -1;
 
 /*    ===================== */
 /*    Function declarations */
 /*    ===================== */
 static void DrawHorizon(long viewpoint_y, long viewpoint_x_angle, long viewpoint_z_angle);
 
-static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint_y_angle, long viewpoint_z_angle);
+static void DrawScenery3D(RenderDevice* pDevice);
+
+static HRESULT RebuildScenery3DVertexBuffer(RenderDevice* pDevice);
 
 static long BuildGroundPlanePolygon(long x1, long y1, long x2, long y2, long screen_width, long screen_height,
                                     long upside_down, long clip_bottom_y, POINT* out_points);
@@ -54,6 +60,7 @@ static long ClipLine(long* x1ptr, long* y1ptr, long* x2ptr, long* y2ptr, long sc
 /*    ======================================================================================= */
 
 void DrawBackdrop(long viewpoint_y, long viewpoint_x_angle, long viewpoint_y_angle, long viewpoint_z_angle) {
+    (void)viewpoint_y_angle;
     /* Clear screen to sky colour first so any unfilled pixels match the backdrop */
     {
         const DWORD sky = SCRGB(SKY_COLOUR);
@@ -65,9 +72,9 @@ void DrawBackdrop(long viewpoint_y, long viewpoint_x_angle, long viewpoint_y_ang
     }
 
     DrawHorizon(viewpoint_y, viewpoint_x_angle, viewpoint_z_angle);
-
-    DrawScenery(viewpoint_y, viewpoint_x_angle, viewpoint_y_angle, viewpoint_z_angle);
 }
+
+void DrawBackdropScenery3D(RenderDevice* pDevice) { DrawScenery3D(pDevice); }
 
 /*    ======================================================================================= */
 /*    Function:        NextSceneryType                                                            */
@@ -80,6 +87,8 @@ void NextSceneryType(void) {
 
     if (current_scenery_type > MAX_SCENERY_TYPE)
         current_scenery_type = MIN_SCENERY_TYPE;
+
+    scenery3DBuiltType = -1;
 }
 
 /*    ======================================================================================= */
@@ -272,9 +281,9 @@ static void DrawHorizon(long viewpoint_y, long viewpoint_x_angle, long viewpoint
 }
 
 /*    ======================================================================================= */
-/*    Function:        DrawScenery                                                                */
+/*    Function:        DrawScenery3D                                                            */
 /*                                                                                            */
-/*    Description:    Draw the current scenery using the supplied viewpoint                    */
+/*    Description:    Draw horizon scenery as world-space 3D geometry                          */
 /*    ======================================================================================= */
 
 #define NUM_SCENERY_OBJECTS 32
@@ -282,7 +291,10 @@ static void DrawHorizon(long viewpoint_y, long viewpoint_x_angle, long viewpoint
 #define MAX_SCENERY_COORDS 7
 
 #define SCENERY_X_Y_SCALE_FACTOR 64 // (z of 0x00010000, divided by (4 * FOCUS))
-#define SCENERY_HORIZON_OVERLAP_PIXELS 4
+#define SCENERY_WORLD_RING_OFFSET 45000
+#define SCENERY_WORLD_BASE_Y (TRACK_BOTTOM_Y - 8)
+#define SCENERY_BASE_VERTEX_DROP_PERCENT 0.15f
+#define MAX_SCENERY_3D_VERTICES 4096
 
 typedef struct {
     COORD_3D* coords;
@@ -291,7 +303,48 @@ typedef struct {
     long* polygons;
 } SCENERY;
 
-static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint_y_angle, long viewpoint_z_angle) {
+static void DrawScenery3D(RenderDevice* pDevice) {
+    if (pDevice == NULL)
+        return;
+
+    if ((pScenery3DVB == NULL) || (scenery3DBuiltType != current_scenery_type)) {
+        if (FAILED(RebuildScenery3DVertexBuffer(pDevice)))
+            return;
+    }
+
+    if ((pScenery3DVB == NULL) || (scenery3DVertexCount <= 0))
+        return;
+
+    pDevice->SetRenderState(RS_ZENABLE, FALSE);
+    pDevice->SetRenderState(RS_CULLMODE, CULL_NONE);
+    pDevice->SetTextureStageState(0, TSS_COLOROP, TOP_DISABLE);
+    pDevice->SetStreamSource(0, pScenery3DVB, 0, sizeof(UTVERTEX));
+    pDevice->SetFVF(FVF_UTVERTEX);
+    pDevice->DrawPrimitive(PT_TRIANGLELIST, 0, scenery3DVertexCount / 3);
+}
+
+static HRESULT RebuildScenery3DVertexBuffer(RenderDevice* pDevice) {
+    if (pScenery3DVB) {
+        pScenery3DVB->Release();
+        pScenery3DVB = NULL;
+    }
+    scenery3DVertexCount = 0;
+    scenery3DBuiltType = -1;
+
+    if (FAILED(pDevice->CreateVertexBuffer(MAX_SCENERY_3D_VERTICES * sizeof(UTVERTEX), VB_USAGE_WRITEONLY,
+                                           FVF_UTVERTEX, POOL_DEFAULT, &pScenery3DVB, NULL))) {
+        OutputDebugStringW(L"ERROR: Failed to create 3D scenery vertex buffer\n");
+        return E_FAIL;
+    }
+
+    UTVERTEX* pVertices = NULL;
+    if (FAILED(pScenery3DVB->Lock(0, 0, (void**)&pVertices, 0))) {
+        OutputDebugStringW(L"ERROR: Failed to lock 3D scenery vertex buffer\n");
+        pScenery3DVB->Release();
+        pScenery3DVB = NULL;
+        return E_FAIL;
+    }
+
     // scenery y positions (range 0-255)
     static long scenery_positions[NUM_SCENERY_OBJECTS] = {
         0x05, 0x0f, 0x15, 0x1f, 0x25, 0x2f, 0x35, 0x3f, 0x45, 0x4f, 0x55, 0x5f, 0x65, 0x6f, 0x75, 0x7f,
@@ -455,26 +508,20 @@ static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint
     SCENERY* scenery;
 
     COORD_3D* scenery_coords;
-    COORD_2D screen_coords[MAX_SCENERY_COORDS];
+    glm::vec3 world_coords[MAX_SCENERY_COORDS];
 
     long m, i, j, number, sides, offset;
-    long position, y_angle, visible;
-    short sin_x, sin_y, sin_z;
-    short cos_x, cos_y, cos_z;
+    long position, y_angle;
+    short sin_y, cos_y;
     long x, y, z;
-    long trans_x, trans_y, trans_z;
-    long screen_width, screen_height;
+    long trans_x, trans_z;
     long* polygons;
+    long polygon_offsets[MAX_POLY_SIDES];
 
     BYTE colour;
-    POINT points[MAX_POLY_SIDES];
-
-    // start of code
-    GetScreenDimensions(&screen_width, &screen_height);
-
-    // x/z angle are fixed for all scenery objects
-    GetSinCos(viewpoint_x_angle, &sin_x, &cos_x);
-    GetSinCos(viewpoint_z_angle, &sin_z, &cos_z);
+    const long scale = (1L << (LOG_CUBE_SIZE - LOG_PRECISION));
+    const float world_center = static_cast<float>((NUM_TRACK_CUBES * scale) / 2);
+    const float base_y = static_cast<float>(SCENERY_WORLD_BASE_Y);
 
     for (m = 0; m < NUM_SCENERY_OBJECTS; m++) {
         // get pointer to scenery definition
@@ -487,81 +534,38 @@ static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint
         // calculate number of co-ordinates
         number = scenery->coordsSize / sizeof(COORD_3D);
 
-        // calculate y angle for this scenery object
-        position = scenery_positions[m] * 256;
-        y_angle = viewpoint_y_angle + position;
+        // Extend base vertices down by 5% of object height so feet meet the ground.
+        long max_source_y = 0;
+        for (i = 0; i < number; ++i) {
+            if (scenery_coords[i].y > max_source_y)
+                max_source_y = scenery_coords[i].y;
+        }
+        float base_vertex_drop = static_cast<float>(max_source_y * SCENERY_X_Y_SCALE_FACTOR) *
+                                 SCENERY_BASE_VERTEX_DROP_PERCENT;
+        if (base_vertex_drop < 1.0f)
+            base_vertex_drop = 1.0f;
 
-        y_angle &= (MAX_ANGLE - 1);
-        // 29/06/1998 - temporarily reverse y_angle
-        y_angle = (-y_angle & (MAX_ANGLE - 1));
+        // calculate y angle for this scenery object around the world centre
+        position = scenery_positions[m] * 256;
+        y_angle = (-position & (MAX_ANGLE - 1));
 
         GetSinCos(y_angle, &sin_y, &cos_y);
 
-        // rotate scenery about x/y/z axis and perform perspective projection
-        visible = TRUE;
+        // rotate scenery around world centre and store world-space coords
         for (i = 0; i < number; i++) {
-            const bool is_ground_vertex = (scenery_coords[i].y == 0);
+            const bool is_base_vertex = (scenery_coords[i].y == 0);
             x = scenery_coords[i].x * SCENERY_X_Y_SCALE_FACTOR;
-            y = -(scenery_coords[i].y * SCENERY_X_Y_SCALE_FACTOR);
-            z = scenery_coords[i].z;
-
-            y -= ((viewpoint_y / 2) >> LOG_PRECISION); // 24/04/1998 - reduce using PC_FACTOR
-
-            // Legacy world-space nudge to avoid seam between scenery and ground.
-            y += SCENERY_X_Y_SCALE_FACTOR;
+            y = scenery_coords[i].y * SCENERY_X_Y_SCALE_FACTOR;
+            z = scenery_coords[i].z + SCENERY_WORLD_RING_OFFSET;
 
             // rotate about y axis
             trans_x = (x * cos_y) + (z * sin_y);
             trans_z = (z * cos_y) - (x * sin_y);
 
-            // rotate about x axis
-            z = trans_z >> LOG_PRECISION;
-            trans_y = (y * cos_x) - (z * sin_x);
-            trans_z = (y * sin_x) + (z * cos_x);
-
-            // rotate about z axis
-            x = trans_x >> LOG_PRECISION;
-            y = trans_y >> LOG_PRECISION;
-            trans_x = (x * cos_z) - (y * sin_z);
-            trans_y = (x * sin_z) + (y * cos_z);
-
-            // skip this scenery object if any z negative (i.e. infront of screen)
-            if (trans_z <= 0) {
-                visible = FALSE;
-                break;
-            }
-
-            // could also eliminate scenery if selected points are outside the
-            // viewing pyramid, although the saving would probably be negligible
-
-            // perspective projection
-            z = trans_z >> LOG_FOCUS;
-
-            // debug stuff
-            if (z == 0) {
-#if defined(DEBUG) || defined(_DEBUG)
-                fprintf(out, "8.  Preventing division by zero\n");
-                //Sleep(10);
-#endif
-
-                z = 1;
-            }
-
-            x = (trans_x / z) + screen_width / 2;
-            y = (trans_y / z) + screen_height / 2;
-
-            // Push only the base of the mountains down slightly in screen space to
-            // guarantee overlap with the horizon fill across rasterizers.
-            if (is_ground_vertex)
-                y += SCENERY_HORIZON_OVERLAP_PIXELS;
-
-            // store screen x and screen y
-            screen_coords[i].x = x;
-            screen_coords[i].y = y;
+            world_coords[i].x = world_center + static_cast<float>(trans_x >> LOG_PRECISION);
+            world_coords[i].y = base_y + static_cast<float>(y) + (is_base_vertex ? base_vertex_drop : 0.0f);
+            world_coords[i].z = world_center + static_cast<float>(trans_z >> LOG_PRECISION);
         }
-
-        if (!visible)
-            continue;
 
         // draw scenery object
         polygons = scenery->polygons;
@@ -569,20 +573,55 @@ static void DrawScenery(long viewpoint_y, long viewpoint_x_angle, long viewpoint
             colour = (BYTE)*polygons++;
 
             sides = *polygons++;
-
-            // store all polygon's points
-            for (j = 0; j < sides; j++) {
-                offset = *polygons++;
-                points[j].x = screen_coords[offset].x;
-                points[j].y = screen_coords[offset].y;
+            if ((sides < 3) || (sides > MAX_POLY_SIDES)) {
+                polygons += sides;
+                continue;
             }
 
-            // draw current polygon
-            SetTextureColour(SCR_BASE_COLOUR + colour);
-            if (sides >= 3)
-                DrawPolygon(points, sides);
+            for (j = 0; j < sides; j++) {
+                polygon_offsets[j] = *polygons++;
+            }
+
+            const DWORD poly_colour = SCRGB(SCR_BASE_COLOUR + colour);
+            for (j = 1; j < (sides - 1); ++j) {
+                if ((scenery3DVertexCount + 3) > MAX_SCENERY_3D_VERTICES)
+                    goto done;
+
+                offset = polygon_offsets[0];
+                pVertices[scenery3DVertexCount].pos = world_coords[offset];
+                pVertices[scenery3DVertexCount].color = poly_colour;
+                pVertices[scenery3DVertexCount].tu = 0.0f;
+                pVertices[scenery3DVertexCount].tv = 0.0f;
+                ++scenery3DVertexCount;
+
+                offset = polygon_offsets[j];
+                pVertices[scenery3DVertexCount].pos = world_coords[offset];
+                pVertices[scenery3DVertexCount].color = poly_colour;
+                pVertices[scenery3DVertexCount].tu = 0.0f;
+                pVertices[scenery3DVertexCount].tv = 0.0f;
+                ++scenery3DVertexCount;
+
+                offset = polygon_offsets[j + 1];
+                pVertices[scenery3DVertexCount].pos = world_coords[offset];
+                pVertices[scenery3DVertexCount].color = poly_colour;
+                pVertices[scenery3DVertexCount].tu = 0.0f;
+                pVertices[scenery3DVertexCount].tv = 0.0f;
+                ++scenery3DVertexCount;
+            }
         }
     }
+
+done:
+    pScenery3DVB->Unlock();
+
+    if (scenery3DVertexCount <= 0) {
+        pScenery3DVB->Release();
+        pScenery3DVB = NULL;
+        return E_FAIL;
+    }
+
+    scenery3DBuiltType = current_scenery_type;
+    return S_OK;
 }
 
 static long BuildGroundPlanePolygon(long x1, long y1, long x2, long y2, long screen_width, long screen_height,
