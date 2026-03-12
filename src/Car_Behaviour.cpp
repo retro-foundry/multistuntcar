@@ -623,6 +623,74 @@ void LimitViewpointY(long* y) {
     }
 }
 
+static long RoundToLong(double value) {
+    return (value >= 0.0) ? static_cast<long>(value + 0.5) : static_cast<long>(value - 0.5);
+}
+
+static void ProjectCarRenderPositionToRoadNormal(long* x, long* y, long* z) {
+    long maxDifference = front_left_road_height - front_left_actual_height;
+    long difference = front_right_road_height - front_right_actual_height;
+    if (difference > maxDifference)
+        maxDifference = difference;
+    difference = rear_road_height - rear_actual_height;
+    if (difference > maxDifference)
+        maxDifference = difference;
+
+    if (maxDifference <= 0)
+        return;
+
+    // Convert wheel-road penetration (height units) to render Y units used by StuntCarRacer.cpp.
+    const long liftY = ((maxDifference + 1) << 8) * LOCAL_Y_FACTOR;
+
+    // Build contact points in the same render coordinate units as x/y/z.
+    const double flx = static_cast<double>(player_x + front_left_wheel_x_offset);
+    const double fly = -static_cast<double>(front_left_road_height) * static_cast<double>(1 << 8) *
+                       static_cast<double>(LOCAL_Y_FACTOR);
+    const double flz = static_cast<double>(player_z + front_left_wheel_z_offset);
+
+    const double frx = static_cast<double>(player_x + front_right_wheel_x_offset);
+    const double fry = -static_cast<double>(front_right_road_height) * static_cast<double>(1 << 8) *
+                       static_cast<double>(LOCAL_Y_FACTOR);
+    const double frz = static_cast<double>(player_z + front_right_wheel_z_offset);
+
+    const double rx = static_cast<double>(player_x + rear_wheel_x_offset);
+    const double ry = -static_cast<double>(rear_road_height) * static_cast<double>(1 << 8) *
+                      static_cast<double>(LOCAL_Y_FACTOR);
+    const double rz = static_cast<double>(player_z + rear_wheel_z_offset);
+
+    // Surface normal from wheel contact triangle: n = (FR-FL) x (REAR-FL).
+    const double ux = frx - flx;
+    const double uy = fry - fly;
+    const double uz = frz - flz;
+
+    const double vx = rx - flx;
+    const double vy = ry - fly;
+    const double vz = rz - flz;
+
+    double nx = (uy * vz) - (uz * vy);
+    double ny = (uz * vx) - (ux * vz);
+    double nz = (ux * vy) - (uy * vx);
+
+    // Use upward-facing normal (up is negative y in render coordinates).
+    if (ny > 0.0) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+    }
+
+    if (ny >= -1e-6) {
+        // Degenerate/near-vertical normal: fallback to vertical projection.
+        *y -= liftY;
+        return;
+    }
+
+    // Move along the surface normal so the y component exactly removes penetration.
+    const double distanceAlongNormal = static_cast<double>(liftY) / (-ny);
+    *x += RoundToLong(nx * distanceAlongNormal);
+    *y += RoundToLong(ny * distanceAlongNormal);
+    *z += RoundToLong(nz * distanceAlongNormal);
+}
+
 /*
     // Old method...
     // 19/09/2007 attempt to limit player_y to prevent road disappearing.  Doesn't work completely on Draw Bridge track
@@ -3564,6 +3632,14 @@ void LimitViewpointYForInstance(long instanceIndex, long* y) {
     const long previousInstance = PushCarBehaviourInstance(instanceIndex);
 
     LimitViewpointY(y);
+
+    PopCarBehaviourInstance(previousInstance);
+}
+
+void ProjectCarRenderPositionToRoadNormalForInstance(long instanceIndex, long* x, long* y, long* z) {
+    const long previousInstance = PushCarBehaviourInstance(instanceIndex);
+
+    ProjectCarRenderPositionToRoadNormal(x, y, z);
 
     PopCarBehaviourInstance(previousInstance);
 }
