@@ -189,11 +189,13 @@ extern long opp_engine_power;
 static long player1_x = 0, player1_y = 0, player1_z = 0;
 
 static long player1_x_angle = (0 << 6), player1_y_angle = (0 << 6), player1_z_angle = (0 << 6);
+static long player1_render_x = 0, player1_render_y = 0, player1_render_z = 0;
 
 // Opponent orientation
 static long opponent_x = 0, opponent_y = 0, opponent_z = 0;
 
 static float opponent_x_angle = 0.0f, opponent_y_angle = 0.0f, opponent_z_angle = 0.0f;
+static long opponent_render_x = 0, opponent_render_y = 0, opponent_render_z = 0;
 
 // Previous logic-tick state for render interpolation
 static long prev_player1_x = 0, prev_player1_y = 0, prev_player1_z = 0;
@@ -853,6 +855,19 @@ static void BuildCarWorldTransform(glm::mat4* out, float x, float y, float z, fl
     mat4Multiply(out, &matRot, &matTrans);
 }
 
+static void UpdateProjectedRenderPositions(void) {
+    player1_render_x = player1_x;
+    player1_render_y = player1_y;
+    player1_render_z = player1_z;
+    ProjectCarRenderPositionToRoadNormalForInstance(0, &player1_render_x, &player1_render_y, &player1_render_z);
+
+    opponent_render_x = opponent_x;
+    opponent_render_y = opponent_y;
+    opponent_render_z = opponent_z;
+    if (bMultiplayerMode)
+        ProjectCarRenderPositionToRoadNormalForInstance(1, &opponent_render_x, &opponent_render_y, &opponent_render_z);
+}
+
 static void CapturePreviousCarState(void) {
     prev_player1_x = player1_x;
     prev_player1_y = player1_y;
@@ -867,17 +882,12 @@ static void CapturePreviousCarState(void) {
     prev_opponent_x_angle = opponent_x_angle;
     prev_opponent_y_angle = opponent_y_angle;
     prev_opponent_z_angle = opponent_z_angle;
-    prev_player1_render_x = player1_x;
-    prev_player1_render_y = player1_y;
-    prev_player1_render_z = player1_z;
-    ProjectCarRenderPositionToRoadNormalForInstance(0, &prev_player1_render_x, &prev_player1_render_y,
-                                                     &prev_player1_render_z);
-    prev_opponent_render_x = opponent_x;
-    prev_opponent_render_y = opponent_y;
-    prev_opponent_render_z = opponent_z;
-    if (bMultiplayerMode)
-        ProjectCarRenderPositionToRoadNormalForInstance(1, &prev_opponent_render_x, &prev_opponent_render_y,
-                                                         &prev_opponent_render_z);
+    prev_player1_render_x = player1_render_x;
+    prev_player1_render_y = player1_render_y;
+    prev_player1_render_z = player1_render_z;
+    prev_opponent_render_x = opponent_render_x;
+    prev_opponent_render_y = opponent_render_y;
+    prev_opponent_render_z = opponent_render_z;
     prev_viewpoint1_x = viewpoint1_x;
     prev_viewpoint1_y = viewpoint1_y;
     prev_viewpoint1_z = viewpoint1_z;
@@ -911,11 +921,9 @@ static void UpdateInterpolatedCarTransforms(RenderDevice* pDevice, float alpha) 
     render_backdrop_viewpoint_y_angle = static_cast<long>(backdropYa) & (MAX_ANGLE - 1);
     render_backdrop_viewpoint_z_angle = static_cast<long>(backdropZa) & (MAX_ANGLE - 1);
 
-    long playerRenderX = player1_x, playerRenderY = player1_y, playerRenderZ = player1_z;
-    ProjectCarRenderPositionToRoadNormalForInstance(0, &playerRenderX, &playerRenderY, &playerRenderZ);
-    const float playerX = LerpFixedCoord(prev_player1_render_x, playerRenderX, alpha);
-    const float playerY = LerpFixedCoord(prev_player1_render_y, playerRenderY, alpha);
-    const float playerZ = LerpFixedCoord(prev_player1_render_z, playerRenderZ, alpha);
+    const float playerX = LerpFixedCoord(prev_player1_render_x, player1_render_x, alpha);
+    const float playerY = LerpFixedCoord(prev_player1_render_y, player1_render_y, alpha);
+    const float playerZ = LerpFixedCoord(prev_player1_render_z, player1_render_z, alpha);
     const float playerXa = LerpWrappedPlayerAngle(prev_player1_x_angle, player1_x_angle, alpha);
     const float playerYa = LerpWrappedPlayerAngle(prev_player1_y_angle, player1_y_angle, alpha);
     const float playerZa = LerpWrappedPlayerAngle(prev_player1_z_angle, player1_z_angle, alpha);
@@ -923,12 +931,9 @@ static void UpdateInterpolatedCarTransforms(RenderDevice* pDevice, float alpha) 
     BuildCarWorldTransform(&matWorldCar, playerX, playerY, playerZ, playerXa, playerYa, playerZa,
                            playerCarYOffset);
 
-    long opponentRenderX = opponent_x, opponentRenderY = opponent_y, opponentRenderZ = opponent_z;
-    if (bMultiplayerMode)
-        ProjectCarRenderPositionToRoadNormalForInstance(1, &opponentRenderX, &opponentRenderY, &opponentRenderZ);
-    const float opponentX = LerpFixedCoord(prev_opponent_render_x, opponentRenderX, alpha);
-    const float opponentY = LerpFixedCoord(prev_opponent_render_y, opponentRenderY, alpha);
-    const float opponentZ = LerpFixedCoord(prev_opponent_render_z, opponentRenderZ, alpha);
+    const float opponentX = LerpFixedCoord(prev_opponent_render_x, opponent_render_x, alpha);
+    const float opponentY = LerpFixedCoord(prev_opponent_render_y, opponent_render_y, alpha);
+    const float opponentZ = LerpFixedCoord(prev_opponent_render_z, opponent_render_z, alpha);
     const float opponentXa = LerpWrappedRadians(prev_opponent_x_angle, opponent_x_angle, alpha);
     const float opponentYa = LerpWrappedRadians(prev_opponent_y_angle, opponent_y_angle, alpha);
     const float opponentZa = LerpWrappedRadians(prev_opponent_z_angle, opponent_z_angle, alpha);
@@ -1000,22 +1005,17 @@ static void UpdateInterpolatedCarTransforms(RenderDevice* pDevice, float alpha) 
 }
 
 static void SetCarWorldTransform(void) {
-    long playerRenderX = player1_x, playerRenderY = player1_y, playerRenderZ = player1_z;
-    ProjectCarRenderPositionToRoadNormalForInstance(0, &playerRenderX, &playerRenderY, &playerRenderZ);
     const float playerCarYOffset = GetPlayerCarRenderYOffset();
-    BuildCarWorldTransform(&matWorldCar, FixedPointToWorldCoord(playerRenderX), FixedPointToWorldCoord(playerRenderY),
-                           FixedPointToWorldCoord(playerRenderZ), PlayerAngleToRadians(player1_x_angle),
+    BuildCarWorldTransform(&matWorldCar, FixedPointToWorldCoord(player1_render_x), FixedPointToWorldCoord(player1_render_y),
+                           FixedPointToWorldCoord(player1_render_z), PlayerAngleToRadians(player1_x_angle),
                            PlayerAngleToRadians(player1_y_angle), PlayerAngleToRadians(player1_z_angle),
                            playerCarYOffset);
 }
 
 static void SetOpponentsCarWorldTransform(void) {
-    long opponentRenderX = opponent_x, opponentRenderY = opponent_y, opponentRenderZ = opponent_z;
-    if (bMultiplayerMode)
-        ProjectCarRenderPositionToRoadNormalForInstance(1, &opponentRenderX, &opponentRenderY, &opponentRenderZ);
     float opponentCarYOffset = GetOpponentCarRenderYOffset();
-    BuildCarWorldTransform(&matWorldOpponentsCar, FixedPointToWorldCoord(opponentRenderX),
-                           FixedPointToWorldCoord(opponentRenderY), FixedPointToWorldCoord(opponentRenderZ),
+    BuildCarWorldTransform(&matWorldOpponentsCar, FixedPointToWorldCoord(opponent_render_x),
+                           FixedPointToWorldCoord(opponent_render_y), FixedPointToWorldCoord(opponent_render_z),
                            opponent_x_angle, opponent_y_angle, opponent_z_angle, opponentCarYOffset);
 }
 
@@ -1731,9 +1731,9 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
             if (alpha > 1.0f)
                 alpha = 1.0f;
 
-            const long p1x = static_cast<long>(LerpLong(prev_player1_x, player1_x, alpha));
-            const long p1y = static_cast<long>(LerpLong(prev_player1_y, player1_y, alpha));
-            const long p1z = static_cast<long>(LerpLong(prev_player1_z, player1_z, alpha));
+            const long p1x = static_cast<long>(LerpLong(prev_player1_render_x, player1_render_x, alpha));
+            const long p1y = static_cast<long>(LerpLong(prev_player1_render_y, player1_render_y, alpha));
+            const long p1z = static_cast<long>(LerpLong(prev_player1_render_z, player1_render_z, alpha));
             const long p1xa = (static_cast<long>(LerpWrappedAngleUnits(prev_player1_x_angle, player1_x_angle, alpha)) &
                                (MAX_ANGLE - 1));
             const long p1ya = (static_cast<long>(LerpWrappedAngleUnits(prev_player1_y_angle, player1_y_angle, alpha)) &
@@ -1741,9 +1741,9 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
             const long p1za = (static_cast<long>(LerpWrappedAngleUnits(prev_player1_z_angle, player1_z_angle, alpha)) &
                                (MAX_ANGLE - 1));
 
-            const long p2x = static_cast<long>(LerpLong(prev_opponent_x, opponent_x, alpha));
-            const long p2y = static_cast<long>(LerpLong(prev_opponent_y, opponent_y, alpha));
-            const long p2z = static_cast<long>(LerpLong(prev_opponent_z, opponent_z, alpha));
+            const long p2x = static_cast<long>(LerpLong(prev_opponent_render_x, opponent_render_x, alpha));
+            const long p2y = static_cast<long>(LerpLong(prev_opponent_render_y, opponent_render_y, alpha));
+            const long p2z = static_cast<long>(LerpLong(prev_opponent_render_z, opponent_render_z, alpha));
             const long p2xa = RadiansToPlayerAngle(LerpWrappedRadians(prev_opponent_x_angle, opponent_x_angle, alpha));
             const long p2ya = RadiansToPlayerAngle(LerpWrappedRadians(prev_opponent_y_angle, opponent_y_angle, alpha));
             const long p2za = RadiansToPlayerAngle(LerpWrappedRadians(prev_opponent_z_angle, opponent_z_angle, alpha));
@@ -1755,12 +1755,6 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
             long bottomViewX, bottomViewY, bottomViewZ, bottomViewXa, bottomViewYa, bottomViewZa;
             CalcGameViewpointForCar(p2x, p2y, p2z, p2xa, p2ya, p2za, &bottomViewX, &bottomViewY, &bottomViewZ,
                                     &bottomViewXa, &bottomViewYa, &bottomViewZa);
-            if (!bOutsideView) {
-                // Keep cockpit cameras locked to the latest clamped car heights so they don't dip through the road
-                // when interpolated car Y values pass under steep track sections.
-                topViewY = player1_y - (HEIGHT_ABOVE_ROAD << LOG_PRECISION);
-                bottomViewY = opponent_y - (HEIGHT_ABOVE_ROAD << LOG_PRECISION);
-            }
 
             // Draw backdrop once for the full frame; per-viewport passes only render 3D + overlays.
             pDevice->SetRenderState(RS_ZENABLE, FALSE);
@@ -2450,6 +2444,7 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                                           &opponent_y_angle, &opponent_z_angle, bOpponentPaused,
                                           (float)g_physicsStepSeconds);
                     }
+                    UpdateProjectedRenderPositions();
                 }
                 if (GameMode == GAME_IN_PROGRESS) {
                     // Snap the car back above the road surface before computing the camera.
@@ -2508,7 +2503,7 @@ static bool RunFrame(double frameTime, bool allowQuit) {
         // correctly interpolates between the last two integration states.
         const float alpha = static_cast<float>(g_logicAccumulator / g_physicsStepSeconds);
         UpdateInterpolatedCarTransforms(&pDevice, alpha);
-        if ((GameMode == TRACK_PREVIEW) || (GameMode == GAME_IN_PROGRESS))
+        if (!bMultiplayerMode && ((GameMode == TRACK_PREVIEW) || (GameMode == GAME_IN_PROGRESS)))
             UpdateInterpolatedOpponentShadow(alpha);
     }
 
@@ -2843,6 +2838,7 @@ int main(int argc, const char** argv) {
     RefreshCombinedInput();
     ResetFourteenFrameTiming();
 #ifdef __EMSCRIPTEN__
+    UpdateProjectedRenderPositions();
     CapturePreviousCarState();
     g_lastFrameTime = GetTimeSeconds();
     g_logicAccumulator = g_physicsStepSeconds;
@@ -2853,6 +2849,7 @@ int main(int argc, const char** argv) {
     emscripten_set_main_loop(em_main_loop, 0, 1);
 #else
     bool run = true;
+    UpdateProjectedRenderPositions();
     CapturePreviousCarState();
     g_lastFrameTime = GetTimeSeconds();
     g_logicAccumulator = g_physicsStepSeconds;
