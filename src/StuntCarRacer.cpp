@@ -67,6 +67,7 @@ GameModeType GameMode = TRACK_MENU;
 UINT keyPress = '\0';
 DWORD lastInput = 0;
 static DWORD g_keyboardInput = 0;
+static DWORD g_player2Input = 0;
 
 static IDirectSound8* ds;
 IDirectSoundBuffer8* WreckSoundBuffer = NULL;
@@ -1228,6 +1229,8 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
 #endif
     txtHelper.DrawTextLine(L"Gamepad controls :-");
     txtHelper.DrawTextLine(L"  Left stick/D-Pad = Steer, RT = Accelerate, LT or B = Brake, A/X/RB = Boost");
+    if (bMultiplayerMode)
+        txtHelper.DrawTextLine(L"Multiplayer controls: Gamepad = Player 1, Keyboard = Player 2");
     txtHelper.DrawTextLine(L"  R = Point car in opposite direction, P = Pause, O = Unpause");
     txtHelper.DrawTextLine(L"  M, Select or Escape = Back to track menu");
 
@@ -1613,8 +1616,16 @@ static void RefreshGamepadInput(void) {
 
 static void RefreshCombinedInput(void) {
     RefreshGamepadInput();
-    // Current gameplay consumes player 1 input; keep player-indexed slots for future 2P.
-    lastInput = g_keyboardInput | g_gamepadInput[0];
+    if (bMultiplayerMode) {
+        // Temporary split-control mapping:
+        // P1 uses gamepad slot 0, P2 uses keyboard.
+        lastInput = g_gamepadInput[0];
+        g_player2Input = g_keyboardInput;
+    } else {
+        // Existing single-player behavior: keyboard + first gamepad drive P1.
+        lastInput = g_keyboardInput | g_gamepadInput[0];
+        g_player2Input = 0;
+    }
 }
 
 static void HandleGamepadDeviceAdded(int deviceIndex) {
@@ -1677,7 +1688,15 @@ static void CloseAllGamepads(void) {
     }
 }
 #else
-static void RefreshCombinedInput(void) { lastInput = g_keyboardInput; }
+static void RefreshCombinedInput(void) {
+    if (bMultiplayerMode) {
+        lastInput = 0;
+        g_player2Input = g_keyboardInput;
+    } else {
+        lastInput = g_keyboardInput;
+        g_player2Input = 0;
+    }
+}
 #endif
 
 bool process_events() {
@@ -2076,7 +2095,7 @@ static bool RunFrame(double frameTime, bool allowQuit) {
 
         // --- Audio (once per physics step) ---
         if ((GameMode == GAME_IN_PROGRESS) && (!bPaused)) {
-            // lastInput is combined keyboard + gamepad (RefreshCombinedInput), so first-input check covers both.
+            // lastInput is player-1 driving input (gamepad in multiplayer mode).
             const DWORD drivingInputMask = KEY_P1_LEFT | KEY_P1_RIGHT | KEY_P1_ACCEL | KEY_P1_BRAKE | KEY_P1_BOOST;
             if (g_restartEngineAudioOnFirstInput) {
                 // Keep engine audio fully silent until the first gameplay input (keyboard or gamepad),
@@ -2124,9 +2143,10 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                             long opponent_x_angle_units = RadiansToPlayerAngle(opponent_x_angle);
                             long opponent_y_angle_units = RadiansToPlayerAngle(opponent_y_angle);
                             long opponent_z_angle_units = RadiansToPlayerAngle(opponent_z_angle);
-                            CarBehaviourForInstance(1, 0, &opponent_x, &opponent_y, &opponent_z, &opponent_x_angle_units,
-                                                    &opponent_y_angle_units, &opponent_z_angle_units,
-                                                    (float)g_physicsStepSeconds);
+                            const DWORD player2Input = (GameMode == GAME_IN_PROGRESS) ? g_player2Input : 0;
+                            CarBehaviourForInstance(1, player2Input, &opponent_x, &opponent_y, &opponent_z,
+                                                    &opponent_x_angle_units, &opponent_y_angle_units,
+                                                    &opponent_z_angle_units, (float)g_physicsStepSeconds);
                             opponent_x_angle = PlayerAngleToRadians(opponent_x_angle_units);
                             opponent_y_angle = PlayerAngleToRadians(opponent_y_angle_units);
                             opponent_z_angle = PlayerAngleToRadians(opponent_z_angle_units);
