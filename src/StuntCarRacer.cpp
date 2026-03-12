@@ -124,6 +124,7 @@ bool bNewGame = FALSE;
 bool bPaused = FALSE;
 bool bPlayerPaused = FALSE;
 bool bOpponentPaused = FALSE;
+bool bMultiplayerMode = FALSE;
 long bTrackDrawMode = 0;
 bool bOutsideView = FALSE;
 long engineSoundPlaying = FALSE;
@@ -774,6 +775,12 @@ static float NormalizeRadians(float angle) {
     return angle;
 }
 
+static long RadiansToPlayerAngle(float angle) {
+    const float wrapped = NormalizeRadians(angle);
+    const long units = static_cast<long>((wrapped * 65536.0f) / (2.0f * PI));
+    return units & (MAX_ANGLE - 1);
+}
+
 static float LerpWrappedRadians(float from, float to, float alpha) {
     const float delta = NormalizeRadians(to - from);
     return from + delta * alpha;
@@ -1208,6 +1215,7 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     }
     txtHelper.DrawTextLine(L"'M', Select or Escape = back to track menu");
     txtHelper.DrawTextLine(L"(Press F4 to change scenery)");
+    txtHelper.DrawTextLine(bMultiplayerMode ? L"(Press F9: Multiplayer mode ON)" : L"(Press F9: Multiplayer mode OFF)");
 
     txtHelper.SetInsertionPos(static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale),
                               static_cast<int>(pd3dsdBackBuffer->Height - 15 * 6 * textScale));
@@ -1741,6 +1749,12 @@ bool process_events() {
                 bOpponentPaused = !bOpponentPaused;
                 break;
 
+            case SDLK_F9:
+                bMultiplayerMode = !bMultiplayerMode;
+                if (bMultiplayerMode)
+                    opponentsID = NO_OPPONENT;
+                break;
+
 #if defined(DEBUG) || defined(_DEBUG)
             case SDLK_BACKSPACE:
                 bOutsideView = !bOutsideView;
@@ -2105,9 +2119,25 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                     if ((GameMode == GAME_IN_PROGRESS) && (!bPlayerPaused))
                         CarBehaviour(lastInput, &player1_x, &player1_y, &player1_z, &player1_x_angle,
                                      &player1_y_angle, &player1_z_angle, (float)g_physicsStepSeconds);
-                    OpponentBehaviour(&opponent_x, &opponent_y, &opponent_z, &opponent_x_angle,
-                                      &opponent_y_angle, &opponent_z_angle, bOpponentPaused,
-                                      (float)g_physicsStepSeconds);
+                    if (bMultiplayerMode) {
+                        if (!bOpponentPaused || bNewGame) {
+                            long opponent_x_angle_units = RadiansToPlayerAngle(opponent_x_angle);
+                            long opponent_y_angle_units = RadiansToPlayerAngle(opponent_y_angle);
+                            long opponent_z_angle_units = RadiansToPlayerAngle(opponent_z_angle);
+                            CarBehaviourForInstance(1, 0, &opponent_x, &opponent_y, &opponent_z, &opponent_x_angle_units,
+                                                    &opponent_y_angle_units, &opponent_z_angle_units,
+                                                    (float)g_physicsStepSeconds);
+                            opponent_x_angle = PlayerAngleToRadians(opponent_x_angle_units);
+                            opponent_y_angle = PlayerAngleToRadians(opponent_y_angle_units);
+                            opponent_z_angle = PlayerAngleToRadians(opponent_z_angle_units);
+                        }
+                        if (bNewGame)
+                            bNewGame = FALSE;
+                    } else {
+                        OpponentBehaviour(&opponent_x, &opponent_y, &opponent_z, &opponent_x_angle,
+                                          &opponent_y_angle, &opponent_z_angle, bOpponentPaused,
+                                          (float)g_physicsStepSeconds);
+                    }
                 }
                 if (GameMode == GAME_IN_PROGRESS) {
                     // Snap the car back above the road surface before computing the camera.
