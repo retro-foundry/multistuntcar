@@ -1688,6 +1688,44 @@ static void SetPerspectiveDepthRange(RenderDevice* pDevice, FLOAT nearPlane, FLO
     pDevice->SetTransform(TS_PROJECTION, &matProj);
 }
 
+static float ComputeRenderInterpolationAlpha(void) {
+    if (g_physicsStepSeconds <= 0.0)
+        return 0.0f;
+
+    float alpha = static_cast<float>(g_logicAccumulator / g_physicsStepSeconds);
+    if (alpha < 0.0f)
+        alpha = 0.0f;
+    if (alpha > 1.0f)
+        alpha = 1.0f;
+    return alpha;
+}
+
+static void PrepareInterpolatedShadowsForView(long viewedCarInstance, float alpha) {
+    RemoveShadowTriangles();
+
+    if (GameMode == TRACK_PREVIEW) {
+        UpdateInterpolatedOpponentShadow(alpha);
+        return;
+    }
+
+    if (GameMode != GAME_IN_PROGRESS && GameMode != GAME_OVER)
+        return;
+
+    if (bMultiplayerMode) {
+        if (viewedCarInstance != 0)
+            UpdateInterpolatedPlayerShadowForInstance(0, alpha);
+        if (viewedCarInstance != 1)
+            UpdateInterpolatedPlayerShadowForInstance(1, alpha);
+        return;
+    }
+
+    if (viewedCarInstance != 1)
+        UpdateInterpolatedOpponentShadow(alpha);
+
+    if (IsSplitScreenMode() && viewedCarInstance != 0)
+        UpdateInterpolatedPlayerShadowForInstance(0, alpha);
+}
+
 static void RenderWorldGeometry(RenderDevice* pDevice, bool drawPlayer1Car, bool drawPlayer2Car) {
     // Draw Track
     pDevice->SetTransform(TS_WORLD, &matWorldTrack);
@@ -1792,6 +1830,8 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
 
     // Render the scene
     if (SUCCEEDED(pDevice->BeginScene())) {
+        const float alpha = ComputeRenderInterpolationAlpha();
+
         if (IsSplitScreenMode() && (GameMode == GAME_IN_PROGRESS || GameMode == GAME_OVER)) {
             GLint fullVp[4];
             glGetIntegerv(GL_VIEWPORT, fullVp);
@@ -1803,12 +1843,6 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
             static TextHelper splitHudTextHelper(g_pFont, g_pSprite, 15);
             splitHudTextHelper.SetDisplaySize(static_cast<int>(15 * textScale));
             splitHudTextHelper.Begin();
-
-            float alpha = (g_physicsStepSeconds > 0.0) ? static_cast<float>(g_logicAccumulator / g_physicsStepSeconds) : 0.0f;
-            if (alpha < 0.0f)
-                alpha = 0.0f;
-            if (alpha > 1.0f)
-                alpha = 1.0f;
 
             const long p1x = static_cast<long>(LerpLong(prev_player1_x, player1_x, alpha));
             const long p1y = static_cast<long>(LerpLong(prev_player1_y, player1_y, alpha));
@@ -1842,12 +1876,14 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
                          render_backdrop_viewpoint_z_angle);
 
             // Player 1 (top): always draw player 2; draw player 1 only when outside view.
+            PrepareInterpolatedShadowsForView(0, alpha);
             RenderGameplayViewport(pDevice, fullVp[0], fullVp[1] + lowerHeight, fullVp[2], upperHeight, topViewX,
                                    topViewY, topViewZ, topViewXa, topViewYa, topViewZa, bOutsideView, true,
                                    !bOutsideView, 0);
             DrawGameplayCockpitHudForInstance(splitHudTextHelper, 0, lapNumber[PLAYER], opponentsDistanceFromPlayer1);
 
             // Player 2 (bottom): always draw player 1; draw player 2 only when outside view.
+            PrepareInterpolatedShadowsForView(1, alpha);
             RenderGameplayViewport(pDevice, fullVp[0], fullVp[1], fullVp[2], lowerHeight, bottomViewX, bottomViewY,
                                    bottomViewZ, bottomViewXa, bottomViewYa, bottomViewZa, true,
                                    bOutsideView, !bOutsideView, 1);
@@ -1865,6 +1901,8 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
         // Draw Backdrop
         DrawBackdrop(render_backdrop_viewpoint_y, render_backdrop_viewpoint_x_angle, render_backdrop_viewpoint_y_angle,
                      render_backdrop_viewpoint_z_angle);
+
+        PrepareInterpolatedShadowsForView(0, alpha);
 
         // Render world geometry with split depth ranges for improved precision.
         SetPerspectiveDepthRange(pDevice, PERSPECTIVE_FAR_PASS_NEAR, PERSPECTIVE_FAR);
@@ -2593,16 +2631,6 @@ static bool RunFrame(double frameTime, bool allowQuit) {
         // correctly interpolates between the last two integration states.
         const float alpha = static_cast<float>(g_logicAccumulator / g_physicsStepSeconds);
         UpdateInterpolatedCarTransforms(&pDevice, alpha);
-        RemoveShadowTriangles();
-        if ((GameMode == TRACK_PREVIEW) || (GameMode == GAME_IN_PROGRESS)) {
-            if (!bMultiplayerMode)
-                UpdateInterpolatedOpponentShadow(alpha);
-            if (GameMode == GAME_IN_PROGRESS) {
-                UpdateInterpolatedPlayerShadowForInstance(0, alpha);
-                if (bMultiplayerMode)
-                    UpdateInterpolatedPlayerShadowForInstance(1, alpha);
-            }
-        }
     }
 
     RenderCurrentFrame(frameTime, static_cast<float>(frameDelta));
