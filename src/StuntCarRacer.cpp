@@ -118,7 +118,7 @@ static bool g_restartEngineAudioOnFirstInput = false;
 static float g_requestedScreenScale = 0.0f;
 
 #ifdef USE_SDL2
-#define MAX_LOCAL_PLAYERS 2
+#define MAX_LOCAL_PLAYERS 8
 #define GAMEPAD_STEER_DEADZONE 12000
 #define GAMEPAD_TRIGGER_THRESHOLD 16000
 
@@ -128,7 +128,12 @@ typedef struct {
 } GAMEPAD_SLOT;
 
 static GAMEPAD_SLOT g_gamepadSlots[MAX_LOCAL_PLAYERS];
-static DWORD g_gamepadInput[MAX_LOCAL_PLAYERS] = {0, 0};
+static DWORD g_gamepadInput[MAX_LOCAL_PLAYERS] = {0};
+// In multiplayer, the device that confirms start on TRACK_PREVIEW becomes Player 1.
+static bool g_pendingMultiplayerStarterIsKeyboard = false;
+static SDL_JoystickID g_pendingMultiplayerStarterInstanceId = -1;
+static bool g_multiplayerPlayer1IsKeyboard = false;
+static SDL_JoystickID g_multiplayerPlayer1InstanceId = -1;
 #endif
 
 bool bShowStats = FALSE;
@@ -1283,6 +1288,13 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
     }
 
     if ((keyPress == STARTMENU) && (TrackID != NO_TRACK)) {
+#ifdef USE_SDL2
+        // Starting a fresh preview from the menu should always re-run multiplayer starter selection.
+        g_pendingMultiplayerStarterIsKeyboard = false;
+        g_pendingMultiplayerStarterInstanceId = -1;
+        g_multiplayerPlayer1IsKeyboard = false;
+        g_multiplayerPlayer1InstanceId = -1;
+#endif
         bNewGame = TRUE; // Used here just to reset the opponent's car, which is then shown during the track preview
         ResetPlayer(); // Also reset player to clear values if there was a previous game (CarBehaviour normally does this, but isn't called for track preview)
         GameMode = TRACK_PREVIEW;
@@ -1314,6 +1326,13 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
         bMultiplayerMode = selectMultiplayer;
         // Left/Right explicitly selects single vs multiplayer; faux mode remains a hidden F8 toggle.
         bFauxMultiplayerMode = false;
+#ifdef USE_SDL2
+        // Re-pick Player 1 controller when multiplayer is selected and started.
+        g_pendingMultiplayerStarterIsKeyboard = false;
+        g_pendingMultiplayerStarterInstanceId = -1;
+        g_multiplayerPlayer1IsKeyboard = false;
+        g_multiplayerPlayer1InstanceId = -1;
+#endif
         keyPress = '\0';
     }
 
@@ -1359,6 +1378,17 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     txtHelper.DrawTextLine(L"  M, Select or Escape = Back to track menu");
 
     if (keyPress == STARTMENU) {
+#ifdef USE_SDL2
+        if (bMultiplayerMode) {
+            g_multiplayerPlayer1IsKeyboard = g_pendingMultiplayerStarterIsKeyboard;
+            g_multiplayerPlayer1InstanceId = g_pendingMultiplayerStarterInstanceId;
+        } else {
+            g_multiplayerPlayer1IsKeyboard = false;
+            g_multiplayerPlayer1InstanceId = -1;
+        }
+        g_pendingMultiplayerStarterIsKeyboard = false;
+        g_pendingMultiplayerStarterInstanceId = -1;
+#endif
         RestartEngineAudioBuffers(true);
         PrimeMultiplayerPlayer2StartFromSinglePlayerOpponent();
         bNewGame = TRUE;
@@ -2144,6 +2174,14 @@ static int FindFreeGamepadSlot(void) {
     return -1;
 }
 
+static int FindFirstConnectedGamepadSlot(void) {
+    for (int i = 0; i < MAX_LOCAL_PLAYERS; ++i) {
+        if (g_gamepadSlots[i].handle && SDL_GameControllerGetAttached(g_gamepadSlots[i].handle))
+            return i;
+    }
+    return -1;
+}
+
 static DWORD BuildGamepadInputForPlayer(SDL_GameController* controller) {
     DWORD input = 0;
     if (controller == NULL)
@@ -2192,13 +2230,55 @@ static void RefreshGamepadInput(void) {
 static void RefreshCombinedInput(void) {
     RefreshGamepadInput();
     if (bMultiplayerMode) {
-        // Temporary split-control mapping:
-        // P1 uses gamepad slot 0, P2 uses keyboard.
-        lastInput = g_gamepadInput[0];
-        g_player2Input = g_keyboardInput;
+        DWORD player1Input = 0;
+        DWORD player2Input = 0;
+
+        if (g_multiplayerPlayer1IsKeyboard) {
+            player1Input = g_keyboardInput;
+            for (int i = 0; i < MAX_LOCAL_PLAYERS; ++i) {
+                if (!g_gamepadSlots[i].handle || !SDL_GameControllerGetAttached(g_gamepadSlots[i].handle))
+                    continue;
+                player2Input |= g_gamepadInput[i];
+            }
+        } else {
+            int player1Slot = -1;
+            if (g_multiplayerPlayer1InstanceId >= 0) {
+                player1Slot = FindGamepadSlotByInstance(g_multiplayerPlayer1InstanceId);
+                if ((player1Slot >= 0) &&
+                    (!g_gamepadSlots[player1Slot].handle ||
+                     !SDL_GameControllerGetAttached(g_gamepadSlots[player1Slot].handle)))
+                    player1Slot = -1;
+            }
+            if (player1Slot < 0) {
+                player1Slot = FindFirstConnectedGamepadSlot();
+                g_multiplayerPlayer1InstanceId =
+                    (player1Slot >= 0) ? g_gamepadSlots[player1Slot].instanceId : -1;
+            }
+
+            player2Input = g_keyboardInput;
+            for (int i = 0; i < MAX_LOCAL_PLAYERS; ++i) {
+                if (!g_gamepadSlots[i].handle || !SDL_GameControllerGetAttached(g_gamepadSlots[i].handle))
+                    continue;
+                if (i == player1Slot)
+                    player1Input |= g_gamepadInput[i];
+                else
+                    player2Input |= g_gamepadInput[i];
+            }
+
+            // Fallback: if no controllers are attached, keep multiplayer playable from keyboard.
+            if (player1Slot < 0) {
+                player1Input = g_keyboardInput;
+                player2Input = 0;
+            }
+        }
+
+        lastInput = player1Input;
+        g_player2Input = player2Input;
     } else {
-        // Existing single-player behavior: keyboard + first gamepad drive P1.
-        lastInput = g_keyboardInput | g_gamepadInput[0];
+        DWORD combinedInput = g_keyboardInput;
+        for (int i = 0; i < MAX_LOCAL_PLAYERS; ++i)
+            combinedInput |= g_gamepadInput[i];
+        lastInput = combinedInput;
         g_player2Input = 0;
     }
 }
@@ -2243,6 +2323,14 @@ static void HandleGamepadDeviceRemoved(SDL_JoystickID instanceId) {
     g_gamepadSlots[slot].handle = NULL;
     g_gamepadSlots[slot].instanceId = -1;
     g_gamepadInput[slot] = 0;
+    if (g_pendingMultiplayerStarterInstanceId == instanceId) {
+        g_pendingMultiplayerStarterIsKeyboard = false;
+        g_pendingMultiplayerStarterInstanceId = -1;
+    }
+    if (g_multiplayerPlayer1InstanceId == instanceId) {
+        g_multiplayerPlayer1IsKeyboard = false;
+        g_multiplayerPlayer1InstanceId = -1;
+    }
     printf("Gamepad P%d disconnected\n", slot + 1);
 }
 
@@ -2261,12 +2349,17 @@ static void CloseAllGamepads(void) {
         g_gamepadSlots[i].instanceId = -1;
         g_gamepadInput[i] = 0;
     }
+    g_pendingMultiplayerStarterIsKeyboard = false;
+    g_pendingMultiplayerStarterInstanceId = -1;
+    g_multiplayerPlayer1IsKeyboard = false;
+    g_multiplayerPlayer1InstanceId = -1;
 }
 #else
 static void RefreshCombinedInput(void) {
     if (bMultiplayerMode) {
-        lastInput = 0;
-        g_player2Input = g_keyboardInput;
+        // No gamepad API in this build; keep multiplayer controllable from keyboard.
+        lastInput = g_keyboardInput;
+        g_player2Input = 0;
     } else {
         lastInput = g_keyboardInput;
         g_player2Input = 0;
@@ -2314,6 +2407,12 @@ bool process_events() {
                     keyPress = SDLK_0;
                     break;
                 }
+#ifdef USE_SDL2
+            if ((GameMode == TRACK_PREVIEW) && bMultiplayerMode && (keyPress == SDLK_RETURN)) {
+                g_pendingMultiplayerStarterIsKeyboard = true;
+                g_pendingMultiplayerStarterInstanceId = -1;
+            }
+#endif
             switch (keyPress) {
 #if defined(DEBUG) || defined(_DEBUG)
             case SDLK_F1:
@@ -2350,14 +2449,28 @@ bool process_events() {
                     if (bMultiplayerMode) {
                         bFauxMultiplayerMode = FALSE;
                         opponentsID = NO_OPPONENT;
+                    } else {
+#ifdef USE_SDL2
+                        g_pendingMultiplayerStarterIsKeyboard = false;
+                        g_pendingMultiplayerStarterInstanceId = -1;
+                        g_multiplayerPlayer1IsKeyboard = false;
+                        g_multiplayerPlayer1InstanceId = -1;
+#endif
                     }
                 }
                 break;
 
             case SDLK_F8:
                 bFauxMultiplayerMode = !bFauxMultiplayerMode;
-                if (bFauxMultiplayerMode)
+                if (bFauxMultiplayerMode) {
                     bMultiplayerMode = FALSE;
+#ifdef USE_SDL2
+                    g_pendingMultiplayerStarterIsKeyboard = false;
+                    g_pendingMultiplayerStarterInstanceId = -1;
+                    g_multiplayerPlayer1IsKeyboard = false;
+                    g_multiplayerPlayer1InstanceId = -1;
+#endif
+                }
                 break;
 
 #if defined(DEBUG) || defined(_DEBUG)
@@ -2488,6 +2601,7 @@ bool process_events() {
             break;
         case SDL_CONTROLLERBUTTONDOWN: {
             const Uint8 btn = event.cbutton.button;
+            const SDL_JoystickID controllerInstanceId = event.cbutton.which;
             const bool inMenu = (GameMode == TRACK_MENU || GameMode == TRACK_PREVIEW || GameMode == GAME_OVER);
             /* Select (Back) only = back to menu during race; B is brake and must not exit */
             if (btn == SDL_CONTROLLER_BUTTON_BACK && GameMode == GAME_IN_PROGRESS) {
@@ -2499,6 +2613,10 @@ bool process_events() {
             }
             if (inMenu) {
                 if (btn == SDL_CONTROLLER_BUTTON_A) {
+                    if ((GameMode == TRACK_PREVIEW) && bMultiplayerMode) {
+                        g_pendingMultiplayerStarterIsKeyboard = false;
+                        g_pendingMultiplayerStarterInstanceId = controllerInstanceId;
+                    }
                     /* A = Confirm / Next (Xbox standard) */
                     if (GameMode == GAME_OVER) {
                         GameMode = TRACK_MENU;
