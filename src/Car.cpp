@@ -294,12 +294,34 @@ extern long CalculateDisplaySpeed(void);
 static int cockpit_vtx = 0;
 static float g_cockpitAtlasUOffset = 0.0f;
 static const float kCockpitAtlasUShift = 100.0f / 1024.0f;
+static const float kCockpitAtlasSideLeftU1 = 0.0f / 1024.0f;
+static const float kCockpitAtlasSideLeftU2 = 141.0f / 1024.0f;
+static const float kCockpitAtlasSideRightU1 = 379.0f / 1024.0f;
+static const float kCockpitAtlasSideRightU2 = 520.0f / 1024.0f;
+static const float kCockpitAtlasSideVExtend = 47.0f / 1024.0f;
+static bool g_cockpitAtlasUseExtendedSideUV = false;
 static void AddQuad(TRANSFORMEDTEXVERTEX* pVertices, float x1, float y1, float x2, float y2, float z, int idx, int revX,
                     float w) {
     float u1 = (revX) ? atlas_tx2[idx] : atlas_tx1[idx], v1 = atlas_ty1[idx];
     float u2 = (revX) ? atlas_tx1[idx] : atlas_tx2[idx], v2 = atlas_ty2[idx];
-    u1 += g_cockpitAtlasUOffset;
-    u2 += g_cockpitAtlasUOffset;
+    bool useCustomSideU = false;
+    if (g_cockpitAtlasUseExtendedSideUV) {
+        if (idx == eCockpitLeft || idx == eCockpitLeft2) {
+            u1 = kCockpitAtlasSideLeftU1;
+            u2 = kCockpitAtlasSideLeftU2;
+            v2 += (v2 >= v1) ? kCockpitAtlasSideVExtend : -kCockpitAtlasSideVExtend;
+            useCustomSideU = true;
+        } else if (idx == eCockpitRight || idx == eCockpitRight2) {
+            u1 = kCockpitAtlasSideRightU1;
+            u2 = kCockpitAtlasSideRightU2;
+            v2 += (v2 >= v1) ? kCockpitAtlasSideVExtend : -kCockpitAtlasSideVExtend;
+            useCustomSideU = true;
+        }
+    }
+    if (!useCustomSideU) {
+        u1 += g_cockpitAtlasUOffset;
+        u2 += g_cockpitAtlasUOffset;
+    }
     if (w != 1.0f) {
         u2 = u1 + (u2 - u1) * w;
     }
@@ -364,7 +386,9 @@ void DrawCockpit(RenderDevice* pDevice) {
     float offsetX = (projWidth - base_width) * 0.5f;
 
     const bool useCockpitAtlas = (g_pCockpitAtlas != NULL);
-    g_cockpitAtlasUOffset = useCockpitAtlas ? kCockpitAtlasUShift : 0.0f;
+    const float cockpitBodyUOffset = useCockpitAtlas ? kCockpitAtlasUShift : 0.0f;
+    g_cockpitAtlasUseExtendedSideUV = useCockpitAtlas;
+    g_cockpitAtlasUOffset = 0.0f;
 
     // Prepare Cockpit drawing
     TRANSFORMEDTEXVERTEX* pVertices;
@@ -373,8 +397,16 @@ void DrawCockpit(RenderDevice* pDevice) {
         OutputDebugStringW(L"ERROR: Failed to lock cockpit vertex buffer\n");
         return;
     }
+    int cockpitBodyVertexStart = 0;
+    int cockpitBodyVertexCount = 0;
+    int postCockpitBodyVertexStart = 0;
+    int cockpitSideVertexStart = 0;
+    int cockpitSideVertexCount = 0;
+
     old_leftwheel = (front_left_amount_below_road >> 6);
     float Wide = wideScreen ? COCKPIT_WIDESCREEN_OFFSET : 0.0f;
+    const float cockpitSideScreenExtend = useCockpitAtlas ? 2.0f * 100.0f : 0.0f;
+    const float cockpitSideY2 = useCockpitAtlas ? 480.0f : (COCKPIT_SIDE_HEIGHT * 2.4f);
     float X1 = (Wide + COCKPIT_WHEEL_LEFT_OFFSET) * 2 + offsetX,
           X2 = ((Wide + COCKPIT_WHEEL_LEFT_OFFSET) * 2 + 2 * COCKPIT_WHEEL_WIDTH) + offsetX;
     float Y1 = (480.0f - COCKPIT_WHEEL_HEIGHT * 2.4f - COCKPIT_WHEEL_BOTTOM_GAP * 2.4f),
@@ -398,23 +430,27 @@ void DrawCockpit(RenderDevice* pDevice) {
         const int engineframes[8] = {0, 0, 0, 1, 2, 2, 2, 1};
         engineFrame = eEngineFlames0 + engineframes[frame >> 1];
     }
-    /* Always draw extra side pieces (atlas eCockpitWL/eCockpitWR) to extend cockpit to the sides */
-    AddQuad(pVertices, 0.0f, COCKPIT_WLEFT_Y_OFFSET * 2.4f, Wide * 2.f + offsetX, 480.0f,
-            0.9f, (bSuperLeague) ? eCockpitWL2 : eCockpitWL, 0, 1);
-    AddQuad(pVertices, offsetX + (640.0f + Wide * 2.f), COCKPIT_WRIGHT_Y_OFFSET * 2.4f, projWidth, 480.0f,
-            0.9f, (bSuperLeague) ? eCockpitWR2 : eCockpitWR, 0, 1);
     AddQuad(pVertices, (Wide + COCKPIT_ENGINE_X_OFFSET) * 2.0f + offsetX, COCKPIT_ENGINE_Y_OFFSET * 2.4f,
             (Wide + COCKPIT_ENGINE_X_OFFSET + COCKPIT_ENGINE_WIDTH) * 2.0f + offsetX,
             (COCKPIT_ENGINE_Y_OFFSET + COCKPIT_ENGINE_HEIGHT) * 2.4f, 0.89f, engineFrame, 0, 1);
+    cockpitBodyVertexStart = cockpit_vtx;
+    g_cockpitAtlasUOffset = cockpitBodyUOffset;
     AddQuad(pVertices, (Wide + COCKPIT_TOP_X_OFFSET) * 2.f + offsetX, 0.0f,
             (Wide + COCKPIT_TOP_X_OFFSET + COCKPIT_TOP_WIDTH) * 2.f + offsetX, COCKPIT_TOP_HEIGHT * 2.4f, 0.9f,
             (bSuperLeague) ? eCockpitTop2 : eCockpitTop, 0, 1);
-    AddQuad(pVertices, Wide * 2.f + 0.0f + offsetX, 0.0f, (Wide + COCKPIT_TOP_X_OFFSET) * 2.f + offsetX,
-            COCKPIT_SIDE_HEIGHT * 2.4f, 0.9f, (bSuperLeague) ? eCockpitLeft2 : eCockpitLeft, 0, 1);
-    AddQuad(pVertices, (Wide + COCKPIT_RIGHT_X_OFFSET) * 2.f + offsetX, 0.0f, (640.0f + Wide * 2.f) + offsetX,
-            COCKPIT_SIDE_HEIGHT * 2.4f, 0.9f, (bSuperLeague) ? eCockpitRight2 : eCockpitRight, 0, 1);
+    cockpitSideVertexStart = cockpit_vtx;
+    AddQuad(pVertices, Wide * 2.f + 0.0f + offsetX - cockpitSideScreenExtend, 0.0f,
+            (Wide + COCKPIT_TOP_X_OFFSET) * 2.f + offsetX,
+            cockpitSideY2, 0.9f, (bSuperLeague) ? eCockpitLeft2 : eCockpitLeft, 0, 1);
+    AddQuad(pVertices, (Wide + COCKPIT_RIGHT_X_OFFSET) * 2.f + offsetX, 0.0f,
+            (640.0f + Wide * 2.f) + offsetX + cockpitSideScreenExtend,
+            cockpitSideY2, 0.9f, (bSuperLeague) ? eCockpitRight2 : eCockpitRight, 0, 1);
+    cockpitSideVertexCount = cockpit_vtx - cockpitSideVertexStart;
     AddQuad(pVertices, Wide * 2 + 0.0f + offsetX, COCKPIT_SIDE_HEIGHT * 2.4f, (640.0f + Wide * 2.f) + offsetX,
             480.0f, 0.9f, (bSuperLeague) ? eCockpitBottom2 : eCockpitBottom, 0, 1);
+    cockpitBodyVertexCount = cockpit_vtx - cockpitBodyVertexStart;
+    g_cockpitAtlasUOffset = 0.0f;
+    postCockpitBodyVertexStart = cockpit_vtx;
     if (new_damage) {
         // cracking... width is 238, offset is 41 (in 320x200 screen space)
         float dam = static_cast<float>(new_damage);
@@ -498,16 +534,51 @@ void DrawCockpit(RenderDevice* pDevice) {
     pDevice->SetSamplerState(0, SAMP_ADDRESSU, TADDRESS_CLAMP);
     pDevice->SetSamplerState(0, SAMP_ADDRESSV, TADDRESS_CLAMP);
 #endif
-    // Draw Cockpit
-    GpuTexture* cockpitTexture = useCockpitAtlas ? g_pCockpitAtlas : g_pAtlas;
-    pDevice->SetTexture(0, cockpitTexture);
+    // Draw cockpit in three ranges so only cockpit body uses atlas2.
     // Cockpit should use point filtering (pixel sharp), not bilinear.
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     pDevice->SetStreamSource(0, pCockpitVB, 0, sizeof(TRANSFORMEDTEXVERTEX));
 
     pDevice->SetFVF(FVF_TRANSFORMEDTEXVERTEX);
-    pDevice->DrawPrimitive(PT_TRIANGLELIST, 0, cockpit_vtx / 3); // 3 points per triangle
+    if (cockpitBodyVertexStart > 0) {
+        pDevice->SetTexture(0, g_pAtlas);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        pDevice->DrawPrimitive(PT_TRIANGLELIST, 0, cockpitBodyVertexStart / 3);
+    }
+
+    if (cockpitBodyVertexCount > 0) {
+        GpuTexture* cockpitBodyTexture = useCockpitAtlas ? g_pCockpitAtlas : g_pAtlas;
+        const int cockpitPostSideVertexStart = cockpitSideVertexStart + cockpitSideVertexCount;
+        if (cockpitSideVertexStart > cockpitBodyVertexStart) {
+            pDevice->SetTexture(0, cockpitBodyTexture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            pDevice->DrawPrimitive(PT_TRIANGLELIST, cockpitBodyVertexStart,
+                                   (cockpitSideVertexStart - cockpitBodyVertexStart) / 3);
+        }
+        if (postCockpitBodyVertexStart > cockpitPostSideVertexStart) {
+            pDevice->SetTexture(0, cockpitBodyTexture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            pDevice->DrawPrimitive(PT_TRIANGLELIST, cockpitPostSideVertexStart,
+                                   (postCockpitBodyVertexStart - cockpitPostSideVertexStart) / 3);
+        }
+        if (cockpitSideVertexCount > 0) {
+            // Draw side quads last so they appear above the rest of cockpit body pieces.
+            GpuTexture* sideTexture = useCockpitAtlas ? g_pCockpitAtlas : g_pAtlas;
+            pDevice->SetTexture(0, sideTexture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            pDevice->DrawPrimitive(PT_TRIANGLELIST, cockpitSideVertexStart, cockpitSideVertexCount / 3);
+        }
+    }
+
+    if (cockpit_vtx > postCockpitBodyVertexStart) {
+        pDevice->SetTexture(0, g_pAtlas);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        pDevice->DrawPrimitive(PT_TRIANGLELIST, postCockpitBodyVertexStart, (cockpit_vtx - postCockpitBodyVertexStart) / 3);
+    }
 
     // Draw Speed bar
     pDevice->SetTextureStageState(0, TSS_COLOROP, TOP_DISABLE);
