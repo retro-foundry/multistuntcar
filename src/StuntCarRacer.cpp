@@ -226,6 +226,7 @@ static void ResetControlSamplingWindow(void);
 static void ApplyWindowLayout(int windowWidth, int windowHeight, bool logLayout);
 static void RefreshCombinedInput(void);
 static void InitialiseBoostStartStateForRace(long reserve);
+static void DrawCenteredTextLine(TextHelper& txtHelper, const std::wstring& line, int y);
 
 #ifdef USE_SDL2
 static void ResetGamepadSlots(void);
@@ -1302,22 +1303,45 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     // output instructions
     const SurfaceDesc* pd3dsdBackBuffer = GetBackBufferSurfaceDesc();
     float textScale = GetTextScale();
-    txtHelper.SetInsertionPos(static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale),
-                              static_cast<int>(pd3dsdBackBuffer->Height - 15 * 9 * textScale));
-    {
-        std::wstringstream ss;
-        ss << L"Selected track - " << (TrackID == NO_TRACK ? L"None" : GetTrackName(TrackID))
-           << L".  Press Enter or A to start game";
-        txtHelper.DrawFormattedTextLine(ss.str());
-    }
-    txtHelper.DrawTextLine(L"'M', Select or Escape = back to track menu");
-    txtHelper.DrawTextLine(L"(Press F4 to change scenery)");
-    txtHelper.DrawTextLine(bMultiplayerMode ? L"(Press F9: Multiplayer mode ON)" : L"(Press F9: Multiplayer mode OFF)");
-    txtHelper.DrawTextLine(bFauxMultiplayerMode ? L"(Press F8: Faux multiplayer ON - AI Player 2)"
-                                                 : L"(Press F8: Faux multiplayer OFF)");
+    const int leftX = static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale);
+    int lineStep = static_cast<int>(15 * textScale);
+    if (lineStep < 1)
+        lineStep = 1;
 
-    txtHelper.SetInsertionPos(static_cast<int>((2 + (wideScreen ? 10 : 0)) * textScale),
-                              static_cast<int>(pd3dsdBackBuffer->Height - 15 * 6 * textScale));
+    const bool selectSinglePlayer = (keyPress == SDLK_LEFT);
+    const bool selectMultiplayer = (keyPress == SDLK_RIGHT);
+    if (selectSinglePlayer || selectMultiplayer) {
+        bMultiplayerMode = selectMultiplayer;
+        // Left/Right explicitly selects single vs multiplayer; faux mode remains a hidden F8 toggle.
+        bFauxMultiplayerMode = false;
+        keyPress = '\0';
+    }
+
+    const int topStartY = lineStep;
+    std::wstringstream trackLine;
+    trackLine << L"Selected track - " << (TrackID == NO_TRACK ? L"None" : GetTrackName(TrackID));
+    DrawCenteredTextLine(txtHelper, trackLine.str(), topStartY);
+    DrawCenteredTextLine(txtHelper, L"Press Enter or A to start game", topStartY + lineStep);
+    DrawCenteredTextLine(txtHelper, L"'M', Select or Escape = back to track menu", topStartY + lineStep * 2);
+    DrawCenteredTextLine(txtHelper, L"(Press F4 to change scenery)", topStartY + lineStep * 3);
+
+    int controlsLineCount = 6;
+    if (bMultiplayerMode)
+        ++controlsLineCount;
+    if (bFauxMultiplayerMode)
+        ++controlsLineCount;
+    const int controlsStartY = pd3dsdBackBuffer->Height - lineStep - controlsLineCount * lineStep;
+
+    const int topSectionEndY = topStartY + lineStep * 4;
+    int multiplayerToggleY = ((topSectionEndY + controlsStartY) / 2) - lineStep;
+    if (multiplayerToggleY < topSectionEndY)
+        multiplayerToggleY = topSectionEndY;
+    const int multiplayerHintY = multiplayerToggleY + lineStep;
+    const std::wstring multiplayerModeLine = bMultiplayerMode ? L"Mode: Multiplayer" : L"Mode: Single Player";
+    DrawCenteredTextLine(txtHelper, multiplayerModeLine, multiplayerToggleY);
+    DrawCenteredTextLine(txtHelper, L"Left/Right = select Single Player / Multiplayer", multiplayerHintY);
+
+    txtHelper.SetInsertionPos(leftX, controlsStartY);
     txtHelper.DrawTextLine(L"Keyboard controls during game :-");
 #if defined(PANDORA) || defined(PYRA)
     txtHelper.DrawTextLine(L"  DPad = Steer, (X) = Accelerate, (B) = Brake, (R) = Nitro");
@@ -1328,7 +1352,7 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     txtHelper.DrawTextLine(L"Gamepad controls :-");
     txtHelper.DrawTextLine(L"  Left stick/D-Pad = Steer, RT = Accelerate, LT or B = Brake, A/X/RB = Boost");
     if (bMultiplayerMode)
-        txtHelper.DrawTextLine(L"Multiplayer controls: Gamepad = Player 1, Keyboard = Player 2");
+        txtHelper.DrawTextLine(L"Multiplayer controls: Use gamepads or keyboard.");
     if (bFauxMultiplayerMode)
         txtHelper.DrawTextLine(L"Faux multiplayer: normal controls for Player 1, AI drives Player 2");
     txtHelper.DrawTextLine(L"  R = Point car in opposite direction, P = Pause, O = Unpause");
@@ -2320,10 +2344,13 @@ bool process_events() {
                 break;
 
             case SDLK_F9:
-                bMultiplayerMode = !bMultiplayerMode;
-                if (bMultiplayerMode) {
-                    bFauxMultiplayerMode = FALSE;
-                    opponentsID = NO_OPPONENT;
+                // Track preview now uses Left/Right to pick single vs multiplayer.
+                if (GameMode != TRACK_PREVIEW) {
+                    bMultiplayerMode = !bMultiplayerMode;
+                    if (bMultiplayerMode) {
+                        bFauxMultiplayerMode = FALSE;
+                        opponentsID = NO_OPPONENT;
+                    }
                 }
                 break;
 
@@ -2488,10 +2515,12 @@ bool process_events() {
                         opponentsID = NO_OPPONENT;
                         ResetDrawBridge();
                     }
-                } else if ((GameMode == TRACK_MENU) && (btn == SDL_CONTROLLER_BUTTON_DPAD_LEFT)) {
-                    keyPress = SDLK_LEFT;  /* previous track */
-                } else if ((GameMode == TRACK_MENU) && (btn == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) {
-                    keyPress = SDLK_RIGHT; /* next track */
+                } else if (((GameMode == TRACK_MENU) || (GameMode == TRACK_PREVIEW)) &&
+                           (btn == SDL_CONTROLLER_BUTTON_DPAD_LEFT)) {
+                    keyPress = SDLK_LEFT;
+                } else if (((GameMode == TRACK_MENU) || (GameMode == TRACK_PREVIEW)) &&
+                           (btn == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) {
+                    keyPress = SDLK_RIGHT;
                 }
             }
             break;
