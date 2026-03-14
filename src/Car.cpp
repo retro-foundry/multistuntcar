@@ -27,6 +27,7 @@ extern FILE* out;
 
 extern bool bSuperLeague;
 extern int wideScreen;
+extern bool bPaused;
 
 /*    =========== */
 /*    Static data */
@@ -436,7 +437,8 @@ void DrawCockpit(RenderDevice* pDevice) {
     int engineFrame = eEngine;
     if (boost_activated) {
         static int frame = 0;
-        frame = (frame + 1) % 16;
+        if (!bPaused)
+            frame = (frame + 1) % 16;
         const int engineframes[8] = {0, 0, 0, 1, 2, 2, 2, 1};
         engineFrame = eEngineFlames0 + engineframes[frame >> 1];
     }

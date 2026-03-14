@@ -1792,6 +1792,18 @@ void RenderText(double fTime) {
 
         txtHelper.End();
 
+        if ((GameMode == GAME_IN_PROGRESS) && bPaused && !raceFinished) {
+            static TextHelper pausedTextHelper(g_pFontLarge, g_pSprite, 25);
+            const int pausedDisplaySize = static_cast<int>(25 * textScale);
+            const int centeredY = (BASE_HEIGHT - pausedDisplaySize) / 2;
+
+            pausedTextHelper.SetDisplaySize(pausedDisplaySize);
+            pausedTextHelper.Begin();
+            pausedTextHelper.SetForegroundColor(glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
+            DrawCenteredTextLine(pausedTextHelper, L"paused", centeredY);
+            pausedTextHelper.End();
+        }
+
         if (raceFinished) {
             double currentTime = GetTimeSeconds(), diffTime;
             if (gameEndTime == 0.0)
@@ -1864,6 +1876,11 @@ static void SetPerspectiveDepthRange(RenderDevice* pDevice, FLOAT nearPlane, FLO
 static float ComputeRenderInterpolationAlpha(void) {
     if (g_physicsStepSeconds <= 0.0)
         return 0.0f;
+
+    // When paused, gameplay state is intentionally not integrated; lock interpolation
+    // to the latest state to avoid blending between stale prev/current snapshots.
+    if (bPaused)
+        return 1.0f;
 
     float alpha = static_cast<float>(g_logicAccumulator / g_physicsStepSeconds);
     if (alpha < 0.0f)
@@ -2614,6 +2631,10 @@ bool process_events() {
             const Uint8 btn = event.cbutton.button;
             const SDL_JoystickID controllerInstanceId = event.cbutton.which;
             const bool inMenu = (GameMode == TRACK_MENU || GameMode == TRACK_PREVIEW || GameMode == GAME_OVER);
+            if (btn == SDL_CONTROLLER_BUTTON_START && GameMode == GAME_IN_PROGRESS) {
+                bPaused = !bPaused;
+                break;
+            }
             /* Select (Back) only = back to menu during race; B is brake and must not exit */
             if (btn == SDL_CONTROLLER_BUTTON_BACK && GameMode == GAME_IN_PROGRESS) {
                 GameMode = TRACK_MENU;
@@ -2949,7 +2970,7 @@ static bool RunFrame(double frameTime, bool allowQuit) {
         // Alpha is the fractional time remaining in the current physics step.
         // Since CapturePreviousCarState() is called once per physics step, this
         // correctly interpolates between the last two integration states.
-        const float alpha = static_cast<float>(g_logicAccumulator / g_physicsStepSeconds);
+        const float alpha = ComputeRenderInterpolationAlpha();
         UpdateInterpolatedCarTransforms(&pDevice, alpha);
     }
 
