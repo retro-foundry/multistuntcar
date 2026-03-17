@@ -62,7 +62,8 @@ if(EMSCRIPTEN)
     "SHELL:-sUSE_SDL_TTF=2"
   )
   # Allow heap to grow at runtime to avoid OOM (game needs ~18MB+ with preloaded assets).
-  # Export WebRTC guest→player2 input interop (C functions are EMSCRIPTEN_KEEPALIVE; add to exports).
+  # Do not set EXPORTED_FUNCTIONS here: it replaces the default list and removes _main (blank screen).
+  # WebRTC guest→player2: SetWebRTCGuestConnected / SetWebRTCGuestPlayer2Input use EMSCRIPTEN_KEEPALIVE.
   target_link_options(stuntcarracer PRIVATE
     "SHELL:-s USE_SDL=2"
     "SHELL:-s USE_SDL_TTF=2"
@@ -70,7 +71,6 @@ if(EMSCRIPTEN)
     "SHELL:-sALLOW_MEMORY_GROWTH=1"
     "SHELL:-sINITIAL_MEMORY=20971520"
     "SHELL:--emrun"
-    "SHELL:-sEXPORTED_FUNCTIONS=_SetWebRTCGuestConnected,_SetWebRTCGuestPlayer2Input"
   )
 
   # glm headers for Emscripten (no system SDL/glm, so fetch glm).
