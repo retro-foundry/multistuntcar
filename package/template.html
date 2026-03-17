@@ -502,6 +502,15 @@
                     }
                 };
 
+                pc.onconnectionstatechange = function() {
+                    var s = pc.connectionState;
+                    if (s === 'disconnected' || s === 'failed' || s === 'closed') {
+                        if (state.role === 'host') {
+                            setWebRTCStatus('Waiting for guest', 'hosting');
+                            if (typeof Module !== 'undefined' && Module._SetWebRTCGuestConnected) Module._SetWebRTCGuestConnected(0);
+                        }
+                    }
+                };
                 pc.ondatachannel = function(event) {
                     state.dc = event.channel;
                     state.dc.onopen = function() {
