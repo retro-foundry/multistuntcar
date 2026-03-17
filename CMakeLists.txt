@@ -99,6 +99,14 @@ if(EMSCRIPTEN)
       "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/data/DejaVuSans-Bold.ttf@/data/DejaVuSans-Bold.ttf"
       "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/package/template.html"
     )
+    add_custom_command(TARGET stuntcarracer POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_CURRENT_SOURCE_DIR}/package/icon.png
+        $<TARGET_FILE_DIR:stuntcarracer>/
+      COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_CURRENT_SOURCE_DIR}/package/icon256.png
+        $<TARGET_FILE_DIR:stuntcarracer>/
+    )
   endif()
 else()
   find_package(OpenGL REQUIRED)
