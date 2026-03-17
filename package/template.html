@@ -667,9 +667,11 @@
                 function snapshotGamepad(gp) {
                     return { type: 'gamepad', index: gp.index, id: gp.id, axes: (gp.axes || []).map(function(v) { return Math.round(v * 1000) / 1000; }), buttons: (gp.buttons || []).map(function(btn) { return { pressed: !!btn.pressed, touched: !!btn.touched, value: Math.round(btn.value * 1000) / 1000 }; }) };
                 }
+                function guestTabVisible() {
+                    return typeof document.visibilityState !== 'undefined' && document.visibilityState === 'visible';
+                }
                 function pollGamepads() {
-                    // Always keep the loop alive; only send when we are actually a guest.
-                    if (state.role === 'guest') {
+                    if (state.role === 'guest' && guestTabVisible()) {
                         var pads = navigator.getGamepads ? navigator.getGamepads() : [];
                         for (var i = 0; i < (pads.length || 0); i++) {
                             if (!pads[i]) continue;
@@ -678,9 +680,20 @@
                     }
                     state.gamepadLoopHandle = requestAnimationFrame(pollGamepads);
                 }
-                window.addEventListener('gamepadconnected', function(e) { if (state.role === 'guest') sendInput(snapshotGamepad(e.gamepad)); });
-                window.addEventListener('gamepaddisconnected', function(e) { if (state.role === 'guest') sendInput({ type: 'gamepad-disconnect', index: e.gamepad.index }); });
-                pollGamepads(); // starts the loop; sends nothing until role becomes 'guest'
+                window.addEventListener('gamepadconnected', function(e) {
+                    if (state.role === 'guest' && guestTabVisible()) sendInput(snapshotGamepad(e.gamepad));
+                });
+                window.addEventListener('gamepaddisconnected', function(e) {
+                    if (state.role === 'guest' && guestTabVisible()) sendInput({ type: 'gamepad-disconnect', index: e.gamepad.index });
+                });
+                document.addEventListener('visibilitychange', function() {
+                    if (state.role !== 'guest' || guestTabVisible() || !state.dc || state.dc.readyState !== 'open') return;
+                    var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+                    for (var i = 0; i < (pads.length || 0); i++) {
+                        if (pads[i]) sendInput({ type: 'gamepad-disconnect', index: i });
+                    }
+                });
+                pollGamepads();
             }
 
             async function startHost() {
