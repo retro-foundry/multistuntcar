@@ -3949,7 +3949,8 @@ void StepEngineAudioStateSubstep(int substeps_per_logic) {
     engineRevs = r;
 }
 
-static void FramesWheelsEngineInternal(IDirectSoundBuffer8* engineSoundBuffers[], int step_divisor) {
+static void FramesWheelsEngineInternal(IDirectSoundBuffer8* engineSoundBuffers[], int step_divisor,
+                                       float pitchScale) {
     /* SECTION BELOW HASN'T BEEN CONVERTED
     clr.w    d1
     clr.w    d2
@@ -4110,8 +4111,12 @@ fwe3    move.w    sprite.DMA.value,dmacon+custom
         engineSoundPlaying = currentBufferReady ? TRUE : FALSE;
     }
 
-    // Set the frequency of the current engine sound
+    // Set the frequency of the current engine sound (pitchScale for Option 4: detune P2 to reduce masking)
     if (currentBufferReady) {
+        if (pitchScale != 1.0f)
+            freq = (DWORD)((double)freq * (double)pitchScale);
+        if (freq < 100)
+            freq = 100;
         engineSoundBuffers[engineSoundIndex]->SetFrequency(freq);
     } else {
         engineSoundPlaying = FALSE;
@@ -4119,11 +4124,12 @@ fwe3    move.w    sprite.DMA.value,dmacon+custom
 }
 
 void FramesWheelsEngine(IDirectSoundBuffer8* engineSoundBuffers[]) {
-    FramesWheelsEngineInternal(engineSoundBuffers, 1);
+    FramesWheelsEngineInternal(engineSoundBuffers, 1, 1.0f);
 }
 
-void FramesWheelsEngineSubstep(IDirectSoundBuffer8* engineSoundBuffers[], int substeps_per_logic) {
-    FramesWheelsEngineInternal(engineSoundBuffers, substeps_per_logic);
+void FramesWheelsEngineSubstep(IDirectSoundBuffer8* engineSoundBuffers[], int substeps_per_logic,
+                               float pitchScale) {
+    FramesWheelsEngineInternal(engineSoundBuffers, substeps_per_logic, pitchScale);
 }
 
 #ifdef TESTENGINE

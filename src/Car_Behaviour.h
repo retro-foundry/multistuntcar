@@ -75,7 +75,8 @@ extern long AmigaVolumeToMixerGain(long amiga_volume);
 extern long CalculateDisplaySpeed(void);
 
 extern void FramesWheelsEngine(IDirectSoundBuffer8* engineSoundBuffers[]);
-extern void FramesWheelsEngineSubstep(IDirectSoundBuffer8* engineSoundBuffers[], int substeps_per_logic);
+extern void FramesWheelsEngineSubstep(IDirectSoundBuffer8* engineSoundBuffers[], int substeps_per_logic,
+                                      float pitchScale = 1.0f);
 extern void StepEngineAudioStateSubstep(int substeps_per_logic);
 extern void EngineSoundStopped(void);
 extern void ResetEngineAudioState(void);

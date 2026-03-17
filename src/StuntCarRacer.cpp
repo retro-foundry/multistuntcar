@@ -2992,7 +2992,7 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                     FramesWheelsEngineSubstep(EngineSoundBuffers, g_physicsSubstepsPerBaseLogic);
                     if (splitScreen) {
                         const long prev1 = PushCarBehaviourInstance(1);
-                        FramesWheelsEngineSubstep(EngineSoundBuffers2, g_physicsSubstepsPerBaseLogic);
+                        FramesWheelsEngineSubstep(EngineSoundBuffers2, g_physicsSubstepsPerBaseLogic, 0.98f);
                         PopCarBehaviourInstance(prev1);
                     }
                 } else if (engineSoundPlaying) {
@@ -3002,7 +3002,7 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                 FramesWheelsEngineSubstep(EngineSoundBuffers, g_physicsSubstepsPerBaseLogic);
                 if (splitScreen) {
                     const long prev1 = PushCarBehaviourInstance(1);
-                    FramesWheelsEngineSubstep(EngineSoundBuffers2, g_physicsSubstepsPerBaseLogic);
+                    FramesWheelsEngineSubstep(EngineSoundBuffers2, g_physicsSubstepsPerBaseLogic, 0.98f);
                     PopCarBehaviourInstance(prev1);
                 }
             }
