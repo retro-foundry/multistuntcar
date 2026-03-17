@@ -71,13 +71,17 @@ static DWORD g_player2Input = 0;
 #ifdef __EMSCRIPTEN__
 static DWORD g_remotePlayer2Input = 0;
 static bool g_webrtcGuestConnected = false;
+static bool g_webrtcReturnToMenuRequested = false;
 
 extern "C" {
 /* Called from JS when WebRTC guest is connected; guest input is passed as player 2 only (in-game, not menus). */
 EMSCRIPTEN_KEEPALIVE void SetWebRTCGuestConnected(int connected) {
-    g_webrtcGuestConnected = (connected != 0);
-    if (!connected)
+    if (!connected) {
+        if (g_webrtcGuestConnected && (GameMode == TRACK_PREVIEW || GameMode == GAME_IN_PROGRESS || GameMode == GAME_OVER))
+            g_webrtcReturnToMenuRequested = true;
         g_remotePlayer2Input = 0;
+    }
+    g_webrtcGuestConnected = (connected != 0);
 }
 EMSCRIPTEN_KEEPALIVE void SetWebRTCGuestPlayer2Input(unsigned int input) {
     g_remotePlayer2Input = input;
@@ -2892,6 +2896,16 @@ static bool RunFrame(double frameTime, bool allowQuit) {
         run = process_events();
     else
         process_events();
+
+#ifdef __EMSCRIPTEN__
+    if (g_webrtcReturnToMenuRequested) {
+        g_webrtcReturnToMenuRequested = false;
+        GameMode = TRACK_MENU;
+        g_restartEngineAudioOnFirstInput = false;
+        opponentsID = NO_OPPONENT;
+        ResetDrawBridge();
+    }
+#endif
 
     if (g_lastFrameTime <= 0.0)
         g_lastFrameTime = frameTime;
