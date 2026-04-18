@@ -42,16 +42,16 @@
  *           Raise to increase stiffness; lower to soften.
  *           256 = scale factor of 1.0 (pass through unchanged).
  * ============================================================================ */
-#define FRONT_SUSPENSION_SPRING   276   /* velocity gain (reference-tick units, scaled by dt_ref/dt) */
-#define FRONT_SUSPENSION_DAMPING  256   /* penetration scale (256/256 = 1.0) */
+#define FRONT_SUSPENSION_SPRING   320   /* velocity gain (reference-tick units, scaled by dt_ref/dt) */
+#define FRONT_SUSPENSION_DAMPING  200   /* penetration scale (256/256 = 1.0) */
 
 /* ============================================================================
  * Rear suspension  (single rear wheel)
  *
  * Same formula as front; independent values let you tune rear separately.
  * ============================================================================ */
-#define REAR_SUSPENSION_SPRING    276   /* velocity gain (reference-tick units, scaled by dt_ref/dt) */
-#define REAR_SUSPENSION_DAMPING   256   /* penetration scale (256/256 = 1.0) */
+#define REAR_SUSPENSION_SPRING    320   /* velocity gain (reference-tick units, scaled by dt_ref/dt) */
+#define REAR_SUSPENSION_DAMPING   200   /* penetration scale (256/256 = 1.0) */
 
 /* ============================================================================
  * Car-to-car (wall) contact
