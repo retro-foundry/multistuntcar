@@ -1,0 +1,90 @@
+{
+  "source_file": "reference/SCR-TNT",
+  "source_sha1": "f6fd44dc425e367b3ce3c6af18cf07f2d7a50d7b",
+  "expected_source_sha1": "f6fd44dc425e367b3ce3c6af18cf07f2d7a50d7b",
+  "piece_data_offsets_base_hex": "0x0196CE",
+  "raw_block_starts_hex": [
+    "0x03BE",
+    "0x04BE",
+    "0x0563",
+    "0x067C",
+    "0x074F",
+    "0x0807",
+    "0x0926",
+    "0x09F3"
+  ],
+  "tracks": [
+    {
+      "index": 0,
+      "name": "DizzyDescent",
+      "file": "DizzyDescent.bin",
+      "raw_start_hex": "0x03BE",
+      "size": 804,
+      "sha1": "3fd7b45b141e5144ec7ad7f4b25b542dc6857bbf",
+      "sha256": "395a649097194fdcdfc00c7705cea4975421d06373192c5f205ea7d66fd8951e"
+    },
+    {
+      "index": 1,
+      "name": "WittyWay",
+      "file": "WittyWay.bin",
+      "raw_start_hex": "0x04BE",
+      "size": 804,
+      "sha1": "8a5bdc36187e9f3553f9517aefd0026f4d9e43ad",
+      "sha256": "dbc3f3941f67842c3f4c93c879a2050c90cfb78da8859ebea6911f78740accec"
+    },
+    {
+      "index": 2,
+      "name": "CrazyCaper",
+      "file": "CrazyCaper.bin",
+      "raw_start_hex": "0x0563",
+      "size": 804,
+      "sha1": "52ff490f4e7feb57b163cfb54f7162d789652556",
+      "sha256": "057192a57cbcb21b9461b0b16af59e7a2fdeedd2eee8334d311f9d48ec88741f"
+    },
+    {
+      "index": 3,
+      "name": "AmazingAdept",
+      "file": "AmazingAdept.bin",
+      "raw_start_hex": "0x067C",
+      "size": 804,
+      "sha1": "8a71dffb69a3a5b6e26d049249e53b32afab06cc",
+      "sha256": "ea882f2c9082e455a221296c38320bbee0f11685839588ee2bedf211fd066617"
+    },
+    {
+      "index": 4,
+      "name": "JerkilyJump",
+      "file": "JerkilyJump.bin",
+      "raw_start_hex": "0x074F",
+      "size": 804,
+      "sha1": "9a7f2d94272ebcbe732b65172c0a3fefe0009539",
+      "sha256": "313770a6e0a021b9abed473aebc18640a5ddc2e7c9ed4ebedff701ac322afb31"
+    },
+    {
+      "index": 5,
+      "name": "EvillyEpisode",
+      "file": "EvillyEpisode.bin",
+      "raw_start_hex": "0x0807",
+      "size": 804,
+      "sha1": "44d9e3ea309ee6915227582b2c5b245e1bb6fe9f",
+      "sha256": "7e2e430d65db97203ab062fe093f832be9c86a57aa0c06f9c5a529f29cb406e0"
+    },
+    {
+      "index": 6,
+      "name": "TeasingTemper",
+      "file": "TeasingTemper.bin",
+      "raw_start_hex": "0x0926",
+      "size": 804,
+      "sha1": "2799706a0b450f5472302e8bba152e5feb492853",
+      "sha256": "5981dd8b8f1c49a8de0e5b07bcdcd1b666c12781a9e9c19baecd86a1c4d1fb6b"
+    },
+    {
+      "index": 7,
+      "name": "RatRace",
+      "file": "RatRace.bin",
+      "raw_start_hex": "0x09F3",
+      "size": 804,
+      "sha1": "8f4ee5942e42700fc623c8bbffd7ae3daeee060a",
+      "sha256": "e824a8189596334aa0e8617170c0d58bfe0c4a49f7728462382a3813f5ec39cd"
+    }
+  ]
+}

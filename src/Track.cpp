@@ -638,7 +638,30 @@ static long CoordVisible(long* xptr, long* yptr, long* zptr, long piece_x, long 
 static void UpdateDrawBridgeYCoords(long piece, long firstCoord, long lastCoord, long firstYIndex, long direction);
 
 static long ReadAmigaTrackData(long track);
-static void* GetTRACKResource(HMODULE hModule, LPCWSTR lpResName);
+static void* GetTRACKResource(HMODULE hModule, LPCWSTR lpResName, const char* filePath, bool* outOwned);
+static long CanLoadTrackPack(TrackPack pack);
+
+static TrackPack gTrackPack = TRACK_PACK_CLASSIC;
+
+static WCHAR kClassicTrackNames[NUM_TRACKS][32] = {L"Little Ramp", L"Stepping Stones", L"Hump Back", L"Big Ramp",
+                                                   L"Ski Jump",    L"Draw Bridge",      L"High Jump", L"Roller Coaster"};
+static WCHAR kTntTrackNames[NUM_TRACKS][32] = {L"Dizzy Descent", L"Witty Way",      L"Crazy Caper",   L"Amazing Adept",
+                                               L"Jerkily Jump",  L"Evilly Episode", L"Teasing Temper", L"Rat Race"};
+static const WCHAR* kTrackPackNames[NUM_TRACK_PACKS] = {L"Classic", L"TNT"};
+
+static const WCHAR* kTrackResourceNames[NUM_TRACK_PACKS][NUM_TRACKS] = {
+    {L"LittleRamp", L"SteppingStones", L"HumpBack", L"BigRamp", L"SkiJump", L"DrawBridge", L"HighJump", L"RollerCoaster"},
+    {L"DizzyDescent", L"WittyWay", L"CrazyCaper", L"AmazingAdept", L"JerkilyJump", L"EvillyEpisode", L"TeasingTemper",
+     L"RatRace"},
+};
+
+static const char* kTrackFilenames[NUM_TRACK_PACKS][NUM_TRACKS] = {
+    {"data/Tracks/LittleRamp.bin", "data/Tracks/SteppingStones.bin", "data/Tracks/HumpBack.bin", "data/Tracks/BigRamp.bin",
+     "data/Tracks/SkiJump.bin", "data/Tracks/DrawBridge.bin", "data/Tracks/HighJump.bin", "data/Tracks/RollerCoaster.bin"},
+    {"data/Tracks/TNT/DizzyDescent.bin", "data/Tracks/TNT/WittyWay.bin", "data/Tracks/TNT/CrazyCaper.bin",
+     "data/Tracks/TNT/AmazingAdept.bin", "data/Tracks/TNT/JerkilyJump.bin", "data/Tracks/TNT/EvillyEpisode.bin",
+     "data/Tracks/TNT/TeasingTemper.bin", "data/Tracks/TNT/RatRace.bin"},
+};
 
 /*    ======================================================================================= */
 /*    Function:        GetTrackName                                                            */
@@ -647,11 +670,27 @@ static void* GetTRACKResource(HMODULE hModule, LPCWSTR lpResName);
 /*    ======================================================================================= */
 
 WCHAR* GetTrackName(long track) {
-    static WCHAR trackNames[][32] = {L"Little Ramp", L"Stepping Stones", L"Hump Back", L"Big Ramp",
-                                     L"Ski Jump",    L"Draw Bridge",     L"High Jump", L"Roller Coaster"};
-
-    return (trackNames[track]);
+    if ((track < 0) || (track >= NUM_TRACKS))
+        return (WCHAR*)L"Unknown";
+    if (gTrackPack == TRACK_PACK_TNT)
+        return kTntTrackNames[track];
+    return kClassicTrackNames[track];
 }
+
+TrackPack GetTrackPack(void) { return gTrackPack; }
+
+long SetTrackPack(TrackPack pack) {
+    if ((pack < TRACK_PACK_CLASSIC) || (pack >= NUM_TRACK_PACKS))
+        return FALSE;
+    if (pack == gTrackPack)
+        return TRUE;
+    if (!CanLoadTrackPack(pack))
+        return FALSE;
+    gTrackPack = pack;
+    return TRUE;
+}
+
+const WCHAR* GetTrackPackName(void) { return kTrackPackNames[gTrackPack]; }
 
 /*    ======================================================================================= */
 /*    Function:        GetPieceAngleAndTemplate                                                */
@@ -1991,68 +2030,72 @@ void ResetDrawBridge(void) {
 
 #define TRACK_DATA_SIZE (804)
 
-static long ReadAmigaTrackData(long track) {
-    static WCHAR track_resource_names[NUM_TRACKS][32] = {L"LittleRamp", L"SteppingStones", L"HumpBack",
-                                                         L"BigRamp",    L"SkiJump",        L"DrawBridge",
-                                                         L"HighJump",   L"RollerCoaster"};
-    static char* track_buffer_ptrs[NUM_TRACKS];
+static long CanLoadTrackPack(TrackPack pack) {
+    if ((pack < TRACK_PACK_CLASSIC) || (pack >= NUM_TRACK_PACKS))
+        return FALSE;
 
-    /*
-// variables that were used to load from files
-    char    track_filenames[][80] =
-                                   {"data\\Tracks\\LittleRamp.bin",
-                                    "data\\Tracks\\SteppingStones.bin",
-                                    "data\\Tracks\\HumpBack.bin",
-                                    "data\\Tracks\\BigRamp.bin",
-                                    "data\\Tracks\\SkiJump.bin",
-                                    "data\\Tracks\\DrawBridge.bin",
-                                    "data\\Tracks\\HighJump.bin",
-                                    "data\\Tracks\\RollerCoaster.bin"};
-    FILE    *in_file;
-    char    buffer[TRACK_DATA_SIZE];
-*/
+    for (long i = 0; i < NUM_TRACKS; ++i) {
+        bool owned = false;
+        void* buffer = GetTRACKResource(NULL, kTrackResourceNames[pack][i], kTrackFilenames[pack][i], &owned);
+        if (buffer == NULL)
+            return FALSE;
+        if (owned)
+            free(buffer);
+    }
+    return TRUE;
+}
+
+static long ReadAmigaTrackData(long track) {
+    static char* track_buffer_ptrs[NUM_TRACKS] = {0};
+    static bool track_buffer_owned[NUM_TRACKS] = {0};
     static long first_time = TRUE;
+    static TrackPack loaded_pack = TRACK_PACK_CLASSIC;
     char* buffer;
     char h, l;
     long i, j;
     short s;
-    // read all tracks on first call
-    if (first_time) {
-        first_time = FALSE;
+
+    if ((track < 0) || (track >= NUM_TRACKS))
+        return FALSE;
+
+    // read all tracks on first call or after pack switch
+    if (first_time || (loaded_pack != gTrackPack)) {
+        TrackPack requested_pack = gTrackPack;
 
         for (i = 0; i < NUM_TRACKS; i++) {
-            if ((buffer = (char*)GetTRACKResource(NULL, track_resource_names[i])) == NULL) {
-                printf("Error loading Track %S\n", track_resource_names[i]);
+            if (track_buffer_owned[i] && track_buffer_ptrs[i] != NULL)
+                free(track_buffer_ptrs[i]);
+            track_buffer_ptrs[i] = NULL;
+            track_buffer_owned[i] = false;
+        }
+
+        for (i = 0; i < NUM_TRACKS; i++) {
+            bool owned = false;
+            buffer = (char*)GetTRACKResource(NULL, kTrackResourceNames[requested_pack][i], kTrackFilenames[requested_pack][i], &owned);
+            if (buffer == NULL) {
+                for (j = 0; j < i; ++j) {
+                    if (track_buffer_owned[j] && track_buffer_ptrs[j] != NULL)
+                        free(track_buffer_ptrs[j]);
+                    track_buffer_ptrs[j] = NULL;
+                    track_buffer_owned[j] = false;
+                }
+                printf("Error loading Track %S\n", kTrackResourceNames[requested_pack][i]);
                 return (FALSE);
             }
 
             track_buffer_ptrs[i] = buffer;
+            track_buffer_owned[i] = owned;
         }
+
+        loaded_pack = requested_pack;
+        first_time = FALSE;
     }
 
     buffer = track_buffer_ptrs[track];
+    if (buffer == NULL)
+        return FALSE;
 
-    /*
-// code that was previously used, to load from file
-    memset(buffer, 0, sizeof(buffer));
-
-    if ((in_file = fopen(track_filenames[track], "rb")) == NULL )        // read, binary
-        {
-        fprintf(out, "Can't open Amiga track data file\n");
-        return(FALSE);
-        }
-
-    if ((i = fread(buffer, sizeof(char), TRACK_DATA_SIZE, in_file)) != TRACK_DATA_SIZE)
-        {
-        fclose(in_file);
-        fprintf(out, "Can't read Amiga track data correctly (%d)\n", i);
-        return(FALSE);
-        }
-
-    fclose(in_file);
-*/
-
-    // transfer track data into final locations
+    // transfer track data into final locations (804-byte format)
     i = 0;
     NumTrackPieces = static_cast<long>(buffer[i++]) & 0xff;
     PlayersStartPiece = static_cast<long>(buffer[i++]) & 0xff;
@@ -2093,43 +2136,35 @@ static long ReadAmigaTrackData(long track) {
     return (TRUE);
 }
 
-/*    ======================================================================================= */
-/*    Function:        GetTRACKResource                                                        */
-/*                                                                                            */
-/*    Description:    Locates and loads into global memory the requested track data file        */
-/*    ======================================================================================= */
+static void* GetTRACKResource(HMODULE hModule, LPCWSTR lpResName, const char* filePath, bool* outOwned) {
+    if (outOwned)
+        *outOwned = false;
 
-static void* GetTRACKResource(HMODULE hModule, LPCWSTR lpResName) {
-    void* pTRACKBytes;
-#ifdef linux
-    const WCHAR* resname[] = {L"LITTLERAMP", L"STEPPINGSTONES", L"HUMPBACK",      L"BIGRAMP", L"SKIJUMP",
-                              L"DRAWBRIDGE", L"HIGHJUMP",       L"ROLLERCOASTER", 0};
-    const char* filename[] = {"data/Tracks/LittleRamp.bin", "data/Tracks/SteppingStones.bin",
-                              "data/Tracks/HumpBack.bin",   "data/Tracks/BigRamp.bin",
-                              "data/Tracks/SkiJump.bin",    "data/Tracks/DrawBridge.bin",
-                              "data/Tracks/HighJump.bin",   "data/Tracks/RollerCoaster.bin"};
-    int i = 0;
-    while (resname[i] && wcscasecmp(resname[i], lpResName))
-        i++;
-    if (!resname[i])
-        return NULL;
-    // file found, get size, alloc size and read binary file
-    FILE* f = fopen(filename[i], "rb");
-    if (!f)
-        return NULL;
-    fseek(f, 0, SEEK_END);
-    int fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (fsize <= 0) {
-        fclose(f);
-        return NULL;
+    if (filePath != NULL) {
+        FILE* f = fopen(filePath, "rb");
+        if (f != NULL) {
+            fseek(f, 0, SEEK_END);
+            long fsize = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (fsize > 0) {
+                void* pTRACKBytes = malloc(static_cast<size_t>(fsize));
+                if (pTRACKBytes != NULL && fread(pTRACKBytes, 1, static_cast<size_t>(fsize), f) == static_cast<size_t>(fsize)) {
+                    fclose(f);
+                    if (outOwned)
+                        *outOwned = true;
+                    return pTRACKBytes;
+                }
+                if (pTRACKBytes != NULL)
+                    free(pTRACKBytes);
+            }
+            fclose(f);
+        }
     }
-    pTRACKBytes = malloc(fsize);
-    fread(pTRACKBytes, 1, fsize, f);
-    fclose(f);
-#else
+
+#ifndef linux
     HRSRC hResInfo;
     HGLOBAL hResData;
+    void* pTRACKBytes;
 
     if ((hResInfo = FindResource(hModule, lpResName, L"TRACK")) == NULL)
         return NULL;
@@ -2139,6 +2174,8 @@ static void* GetTRACKResource(HMODULE hModule, LPCWSTR lpResName) {
 
     if ((pTRACKBytes = LockResource(hResData)) == NULL)
         return NULL;
+    return pTRACKBytes;
+#else
+    return NULL;
 #endif
-    return (void*)pTRACKBytes;
 }

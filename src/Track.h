@@ -41,6 +41,12 @@
 #define ROLLER_COASTER 7
 #define NUM_TRACKS 8
 
+typedef enum {
+    TRACK_PACK_CLASSIC = 0,
+    TRACK_PACK_TNT = 1,
+    NUM_TRACK_PACKS = 2
+} TrackPack;
+
 /*    ===================== */
 /*    Structure definitions */
 /*    ===================== */
@@ -87,6 +93,9 @@ typedef struct {
 /*    External function declarations */
 /*    ============================== */
 extern WCHAR* GetTrackName(long track);
+extern TrackPack GetTrackPack(void);
+extern long SetTrackPack(TrackPack pack);
+extern const WCHAR* GetTrackPackName(void);
 
 extern char GetPieceAngleAndTemplate(long piece);
 

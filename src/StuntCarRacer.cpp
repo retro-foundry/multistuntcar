@@ -1315,7 +1315,8 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
     const int titleY = static_cast<int>(15 * 3 * textScale);
     const int subtitleY = titleY + titleSize;
     const int trackY = static_cast<int>(15 * 9 * textScale);
-    const int bottomInfoY = static_cast<int>(pd3dsdBackBuffer->Height - 15 * 8 * textScale);
+    const int packY = trackY + regularSize;
+    const int bottomInfoY = static_cast<int>(pd3dsdBackBuffer->Height - 15 * 9 * textScale);
 
     txtHelper.SetDisplaySize(titleSize);
     DrawCenteredTextLine(txtHelper, L"Multi Stunt Car", titleY);
@@ -1327,23 +1328,54 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
         ss << L"Track: " << (TrackID == NO_TRACK ? L"None" : GetTrackName(TrackID));
         DrawCenteredTextLine(txtHelper, ss.str(), trackY);
     }
-    DrawCenteredTextLine(txtHelper, L"Left/Right or D-pad = change track.  Enter or A = select.  Escape = quit.", bottomInfoY);
+    {
+        std::wstringstream ss;
+        ss << L"Track Pack: " << GetTrackPackName();
+        DrawCenteredTextLine(txtHelper, ss.str(), packY);
+    }
+    DrawCenteredTextLine(txtHelper, L"Left/Right or D-pad = change track (Classic then TNT).  Enter or A = select.  Escape = quit.", bottomInfoY);
     DrawCenteredTextLine(txtHelper, L"'L' to switch Super League On/Off", bottomInfoY + regularSize);
 
     const bool goPrev = (keyPress == SDLK_LEFT);
     const bool goNext = (keyPress == SDLK_RIGHT);
     if (goPrev || goNext || (keyPress == LEAGUEMENU)) {
+        static long menuTrackSelection = 0;
+        TrackPack previous_pack = GetTrackPack();
+        bool changed_pack = false;
+
+        if (TrackID != NO_TRACK)
+            menuTrackSelection = static_cast<long>(GetTrackPack()) * NUM_TRACKS + TrackID;
+
         if (keyPress == LEAGUEMENU) {
             bSuperLeague = !bSuperLeague;
             track_number = TrackID;
             CreateCarVertexBuffer(GetRenderDevice()); // recreate car
         } else {
-            track_number = goNext
-                ? ((TrackID == NO_TRACK) ? 0 : (TrackID + 1) % NUM_TRACKS)
-                : ((TrackID == NO_TRACK) ? (long)(NUM_TRACKS - 1) : (TrackID + NUM_TRACKS - 1) % NUM_TRACKS);
+            const long totalTracks = NUM_TRACKS * NUM_TRACK_PACKS;
+            if (goNext)
+                menuTrackSelection = (menuTrackSelection + 1) % totalTracks;
+            else
+                menuTrackSelection = (menuTrackSelection + totalTracks - 1) % totalTracks;
+
+            TrackPack desiredPack = (menuTrackSelection < NUM_TRACKS ? TRACK_PACK_CLASSIC : TRACK_PACK_TNT);
+            if (desiredPack != previous_pack) {
+                if (!SetTrackPack(desiredPack)) {
+#if defined(DEBUG) || defined(_DEBUG)
+                    fprintf(out, "Failed to switch track pack\n");
+#endif
+                    MessageBox(NULL, L"Failed to switch track pack", L"Error", MB_OK);
+                    keyPress = '\0';
+                    return;
+                }
+                changed_pack = true;
+            }
+
+            track_number = menuTrackSelection % NUM_TRACKS;
         }
 
         if (!ConvertAmigaTrack(track_number)) {
+            if (changed_pack)
+                SetTrackPack(previous_pack);
 #if defined(DEBUG) || defined(_DEBUG)
             fprintf(out, "Failed to convert track %d\n", track_number);
 #endif

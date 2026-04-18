@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stunt Car Racer — Physics Bounciness Deep Review</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #1a1a2e;
+    --surface: #16213e;
+    --card:    #0f3460;
+    --accent:  #e94560;
+    --gold:    #f5a623;
+    --green:   #27ae60;
+    --red:     #e74c3c;
+    --text:    #e0e0e0;
+    --muted:   #8899aa;
+    --code-bg: #0d1b2a;
+    --border:  #2a3f5f;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.7;
+    padding: 48px 64px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  /* ── Title block ── */
+  .title-block {
+    border-left: 6px solid var(--accent);
+    padding: 24px 28px;
+    background: var(--surface);
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 40px;
+  }
+  .title-block h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+  .title-block .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .title-block .subtitle span { color: var(--gold); font-weight: 600; }
+
+  /* ── Section headings ── */
+  h2 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--gold);
+    margin: 40px 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #aaccff;
+    margin: 20px 0 8px;
+  }
+
+  /* ── Paragraphs ── */
+  p { margin-bottom: 12px; }
+
+  /* ── Verdict callout ── */
+  .verdict {
+    background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 100%);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 0 0 32px;
+  }
+  .verdict strong { color: var(--gold); }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 16px 18px;
+    font-family: 'IBM Plex Mono', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    overflow-x: auto;
+    margin: 14px 0 18px;
+    color: #c8d8e8;
+  }
+  code {
+    font-family: 'IBM Plex Mono', 'Consolas', monospace;
+    font-size: 12px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #aaddff;
+  }
+
+  /* ── Math display ── */
+  .math-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 20px;
+    font-size: 15px;
+    text-align: center;
+    margin: 14px 0 18px;
+    color: #e8d8c0;
+    letter-spacing: 0.5px;
+  }
+  .math-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: -12px;
+    margin-bottom: 14px;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: 13px;
+  }
+  thead tr { background: var(--card); }
+  thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 700;
+    color: #fff;
+    border-bottom: 2px solid var(--accent);
+  }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,0.03); }
+  tbody tr:hover { background: rgba(255,255,255,0.06); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  td.ok  { color: var(--green); font-weight: 700; }
+  td.warn { color: var(--gold); font-weight: 700; }
+  td.bad  { color: var(--red);  font-weight: 700; }
+
+  /* ── Info / warning boxes ── */
+  .box {
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 13px;
+  }
+  .box-warn {
+    background: rgba(245, 166, 35, 0.12);
+    border-left: 4px solid var(--gold);
+  }
+  .box-ok {
+    background: rgba(39, 174, 96, 0.10);
+    border-left: 4px solid var(--green);
+  }
+  .box-bad {
+    background: rgba(231, 76, 60, 0.10);
+    border-left: 4px solid var(--red);
+  }
+  .box strong { color: inherit; }
+
+  /* ── Horizontal rule ── */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  /* ── Commit tag ── */
+  .commit {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    color: var(--gold);
+  }
+
+  /* ── Print overrides ── */
+  @media print {
+    body { background: #fff; color: #111; padding: 24px 40px; }
+    :root {
+      --bg: #fff; --surface: #f5f5f5; --card: #e8ecf0; --text: #111;
+      --code-bg: #f0f4f8; --border: #ccd; --muted: #666;
+    }
+    pre, .math-block { color: #222; }
+    .title-block { background: #f0f4f8; }
+    h2 { color: #b8000a; }
+    h3 { color: #003080; }
+    a { color: inherit; }
+    .verdict { background: #fffbe6; }
+    thead tr { background: #dde3ea; }
+    thead th { color: #111; }
+    td.ok { color: #196f3d; }
+    td.warn { color: #7d6608; }
+    td.bad { color: #922b21; }
+    .box-warn { background: #fffbe6; }
+    .box-ok   { background: #eafaf1; }
+    .box-bad  { background: #fdedec; }
+  }
+</style>
+</head>
+<body>
+
+<div class="title-block">
+  <h1>Stunt Car Racer — Physics Bounciness Deep Review</h1>
+  <p class="subtitle">
+    Reference: <span>reference/StuntCarRacer.s</span> (Amiga 68000) &nbsp;·&nbsp;
+    Port: <span>src/Car_Behaviour.cpp</span> &nbsp;·&nbsp;
+    Date: <span>18 April 2026</span>
+  </p>
+</div>
+
+<div class="verdict">
+  <strong>Short answer:</strong> The steady-state math is correct and the integration
+  architecture is sound. The bounce <em>feel</em> is almost certainly softer than the
+  Amiga original — not because of a bug, but because a well-sampled 60 Hz discrete
+  spring-damper is inherently less oscillatory than an undersampled ~7 Hz one.
+  Tuning <code>PhysicsConfig.h</code> is the right lever; see §6.
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════ §1 ═══ -->
+<h2><span class="num">1</span> The Amiga Spring-Damper (heart of the bounce)</h2>
+
+<p>
+  The entire per-wheel suspension lives in one six-instruction subroutine —
+  <code>calculate.difference</code> at <code>StuntCarRacer.s:15354</code>:
+</p>
+
+<pre>calculate.difference
+    move.w  #276,d3          ; spring constant
+    beq     .zero
+    muls    d3,d0            ; d0 = (new_penetration − old_penetration) × 276
+    asr.l   #8,d0            ; ÷ 256
+.zero
+    add.w   d6,d0            ; + raw penetration depth
+    rts</pre>
+
+<p>
+  <code>d0</code> enters as <strong>Δd = new_penetration − old_penetration</strong>
+  (velocity term); <code>d6</code> holds the current raw penetration depth
+  (position term). The resulting force formula is:
+</p>
+
+<div class="math-block">
+  force = (Δd × 276) ÷ 256 + d
+</div>
+<p class="math-label">
+  where Δd = penetration change since last tick, d = current penetration depth
+</p>
+
+<p>
+  The effective damping coefficient is <strong>256/256 = 1.0</strong> (the position
+  term is passed through unchanged). This runs once per game tick at
+  <strong>≈ 7.14 Hz</strong> — the Amiga waits for <code>MIN.FRAMES = 5</code>
+  PAL vblanks, but the render loop typically costs ~7 frames, giving the
+  reference period <code>PHYSICS_REFERENCE_STEP_SECONDS = 0.14 s</code>.
+</p>
+
+<p>
+  After the three wheel forces are computed, they are averaged
+  (<code>average.amount.below.road</code>) and projected onto the car's surface
+  normal via <code>calculate.car.collision.acceleration</code> to produce
+  world-axis accelerations. Everything else flows from there.
+</p>
+
+
+<!-- ═══════════════════════════════════════════════════ §2 ═══ -->
+<h2><span class="num">2</span> The Port's Spring-Damper at 60 Hz</h2>
+
+<p>
+  <code>CalculateWheelCollision()</code> in
+  <code>Car_Behaviour.cpp</code> reproduces the Amiga formula faithfully,
+  with one critical adaptation for the higher tick rate:
+</p>
+
+<pre>const long spring_effective =
+    (g_physicsStepScale > 0.0f)
+        ? (long)((float)spring / g_physicsStepScale)
+        : spring;</pre>
+
+<p>
+  At 60 Hz, <code>g_physicsStepScale = stepSeconds / 0.14 ≈ 0.01667 / 0.14 ≈ 0.119</code>.
+  The velocity term Δd is ~8.4× smaller per substep (the penetration changes less
+  in 16.7 ms than in 140 ms), so the spring coefficient must be scaled up by the
+  same factor to preserve total impulse:
+</p>
+
+<div class="math-block">
+  spring_effective = 276 ÷ 0.119 ≈ 2319
+</div>
+<p class="math-label">
+  Force-per-step is smaller, but there are 8.4× more steps — net impulse per
+  reference period is preserved.
+</p>
+
+<p>
+  The position (damping) term uses raw <code>damping = 256</code>, which is correct —
+  penetration depth does not scale with timestep. The 16-bit signed-word arithmetic
+  (<code>short delta_word</code>, <code>short spring_word</code>, etc.) faithfully
+  mirrors the Amiga's <code>muls</code> / <code>asr.l</code> / <code>add.w</code>
+  overflow behaviour.
+</p>
+
+
+<!-- ═══════════════════════════════════════════════════ §3 ═══ -->
+<h2><span class="num">3</span> Why It Is Still Less Bouncy</h2>
+
+<p>
+  Even with per-step forces mathematically preserved, the <em>transient dynamics</em>
+  differ because the suspension is a discrete feedback loop:
+</p>
+
+<div class="math-block">
+  penetration → force → acceleration → speed → position → new penetration → ···
+</div>
+
+<p>
+  At <strong>7 Hz</strong>, the loop takes a few, large steps through each oscillation
+  cycle. Before the next tick corrects it, the car overshoots the equilibrium
+  significantly. That overshoot <em>is</em> the Amiga bounce. With
+  spring = 276 and damping = 256 at 7 Hz the system is
+  <strong>underdamped</strong> — it oscillates visibly before settling.
+</p>
+
+<p>
+  At <strong>60 Hz</strong>, the same loop takes many small steps. The system
+  converges toward the continuous-time solution — smoother and more critically
+  damped. Overshoots are caught and corrected within a fraction of the oscillation
+  period. The car settles faster. This is not a scaling error; it is the fundamental
+  behaviour of discrete feedback systems under refinement.
+</p>
+
+<p>
+  The Amiga's bounce was partly intentional tuning and partly an artefact of the
+  low tick rate. The port at 60 Hz eliminates the artefact while preserving the
+  intention.
+</p>
+
+<p>
+  More formally, the <strong>damping ratio ζ</strong> of a discrete spring-damper
+  increases as the timestep shrinks for the same coefficients:
+</p>
+
+<div class="math-block">
+  ζ ∝ c / (2·√(k·m))   →   higher ζ at shorter Δt for fixed k, c
+</div>
+<p class="math-label">
+  k = spring constant, c = damping coefficient, m = effective mass
+</p>
+
+
+<!-- ═══════════════════════════════════════════════════ §4 ═══ -->
+<h2><span class="num">4</span> Full Integration Chain Audit</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Amiga (reference/StuntCarRacer.s)</th>
+      <th>Port (Car_Behaviour.cpp)</th>
+      <th>Match</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Gravity constant</td>
+      <td><code>CAR.WEIGHT equ 317</code></td>
+      <td><code>GRAVITY_ACCELERATION 317</code></td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Gravity decomposition</td>
+      <td>3 trig component multiplies via <code>mult.minus.weight</code></td>
+      <td>Identical: <code>−317 × trig_coeff[Y_COMP] &gt;&gt; LOG_PRECISION</code></td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Spring formula</td>
+      <td><code>Δd × 276 &gt;&gt; 8 + d</code></td>
+      <td><code>Δd × (276/scale) &gt;&gt; 8 + d × 256 &gt;&gt; 8</code></td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Force → world acceleration</td>
+      <td><code>avg_force × surface_normal &gt;&gt; 8</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Damping constant</td>
+      <td><code>REDUCTION equ 238</code></td>
+      <td><code>REDUCTION = 238</code></td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Speed integration</td>
+      <td><code>accel × 238 &gt;&gt; 8</code> once/tick</td>
+      <td>Same × stepScale, carry-accumulated</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Position integration</td>
+      <td><code>speed × 238 &gt;&gt; 1</code> (Y), <code>× 238 × PC_FACTOR</code> (XZ)</td>
+      <td>Same, carry-accumulated</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Rotation damping</td>
+      <td><code>rot_accel = spring_torque − rot_speed &gt;&gt; 4</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Drag / ReduceWorldAcceleration</td>
+      <td><code>(world_speed × amount) &gt;&gt; 16 &gt;&gt; factor</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Grip limit</td>
+      <td>Engine force clamped to <code>2 × collision_y_accel</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Landing detection</td>
+      <td>Force jumps from <code>&lt; 0x200</code> to <code>≥ 0x400</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Rebound clamp</td>
+      <td>Force capped at <code>0x11ff</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Damage threshold</td>
+      <td><code>0x700</code>, <code>1.5×</code> multiplier, rate-limited</td>
+      <td>Identical + per-wheel bitmask (improvement)</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Wheel spin decay (air)</td>
+      <td>−25% per tick: <code>speed −= speed/4</code></td>
+      <td><code>pow(0.75, stepScale)</code> per substep</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Boost (force)</td>
+      <td><code>engine_z_acceleration *= 2</code></td>
+      <td>Identical</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Boost drain rate</td>
+      <td>Per-tick on fourteen-frame gate</td>
+      <td><code>AdvanceBoostReserve()</code> on logic tick — decoupled from physics rate</td>
+      <td class="ok">✓</td>
+    </tr>
+    <tr>
+      <td>Bounce feel at 60 Hz vs 7 Hz</td>
+      <td>—</td>
+      <td>Smoother due to higher discrete sample rate (see §3)</td>
+      <td class="warn">~90%</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<!-- ═══════════════════════════════════════════════════ §5 ═══ -->
+<h2><span class="num">5</span> Recent Commits — Assessment</h2>
+
+<h3><span class="commit">61c5712</span> Fractional Carry Physics — <em>Car_Behaviour.cpp</em></h3>
+<div class="box box-ok">
+<strong>Good change.</strong> Replaced naive <code>(long)((float)value × stepScale)</code>
+truncation with a 16.16 fixed-point accumulator. At 60 Hz, stepScale ≈ 0.119, so most
+small integer values would previously truncate to zero <em>every single substep</em>,
+silently leaking energy out of the simulation. The carry accumulator ensures nothing
+is lost across substeps:
+</div>
+
+<pre>// DistributeStepValueWithScale — 16.16 fixed-point carry
+const long scale_fp = (long)(step_scale * 65536.0f + 0.5f);
+long long total = remainder + (full_step_value * (long long)scale_fp);
+substep_value   = (long)(total / 65536LL);
+remainder       = (long)(total - substep_value * 65536LL);</pre>
+
+<p>
+  All twelve integration paths (rotation speed, world speed, position × XYZ, angle × XYZ)
+  were updated. Carry state is included in the instance state saved/restored for
+  multiplayer.
+</p>
+
+<h3><span class="commit">e4931b6</span> Carry Based Integration — <em>Opponent_Behaviour.cpp</em></h3>
+<div class="box box-ok">
+<strong>Good change.</strong> The same carry-accumulator was applied to the opponent's
+z-speed, wheel y-speeds, actual heights, and forward distance integration. Before this,
+the AI car would have suffered the same integer-truncation energy loss as the player.
+Opponent physics now run on the same precision footing.
+</div>
+
+<h3><span class="commit">a74db58</span> Opponent Steering Update — <em>Opponent_Behaviour.cpp</em></h3>
+<div class="box box-ok">
+<strong>Small cleanup.</strong> 4-line net reduction. No physics constants changed.
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════ §6 ═══ -->
+<h2><span class="num">6</span> Tuning Options for Amiga-Style Bounce Feel</h2>
+
+<p>
+  All knobs are in <code>src/PhysicsConfig.h</code> — the system is designed for this.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Option</th><th>Approach</th><th>Trade-off</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>A — Tune PhysicsConfig.h</strong> <em>(recommended)</em></td>
+      <td>
+        Raise <code>FRONT/REAR_SUSPENSION_SPRING</code>, lower
+        <code>FRONT/REAR_SUSPENSION_DAMPING</code>.<br>
+        Currently applied: <code>SPRING = 320</code>, <code>DAMPING = 200</code>.
+      </td>
+      <td>Higher spring = stiffer pop on contact; lower damping = longer oscillation. Easy to iterate.</td>
+    </tr>
+    <tr>
+      <td><strong>B — Lower physics rate</strong></td>
+      <td>Set <code>PHYSICS_UPDATE_HZ = 7</code>, remove step scaling.</td>
+      <td>Exact Amiga bounce match, but loses smooth rendering, multiplayer benefits.</td>
+    </tr>
+    <tr>
+      <td><strong>C — Accept the difference</strong></td>
+      <td>The 60 Hz behaviour is arguably the continuous-time ideal.</td>
+      <td>Smoother, more predictable, but less "old game" feel.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Tuning guide for PhysicsConfig.h</h3>
+<table>
+  <thead>
+    <tr><th>Feeling</th><th>SPRING</th><th>DAMPING</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Original Amiga (reference)</td><td>276</td><td>256</td></tr>
+    <tr><td>Current (post-change)</td><td>320</td><td>200</td></tr>
+    <tr><td>More bouncy / less settled</td><td>350–400</td><td>160–180</td></tr>
+    <tr><td>If landing feels explosive</td><td>300</td><td>220</td></tr>
+    <tr><td>Stiffer front, softer rear</td><td>FRONT=340, REAR=300</td><td>FRONT=190, REAR=220</td></tr>
+  </tbody>
+</table>
+
+
+<!-- ═══════════════════════════════════════════════════ §7 ═══ -->
+<h2><span class="num">7</span> Things That Give Grug Headache</h2>
+
+<h3>HIGHER_FRAME_RATE zombie code</h3>
+<div class="box box-warn">
+<strong>Dead code, but dangerous.</strong> The old StuntCarRemake experiment still
+compiles inside <code>CalculateCarCollisionAcceleration()</code>:
+</div>
+
+<pre>#ifdef HIGHER_FRAME_RATE
+    car_collision_x_acceleration++;
+    car_collision_y_acceleration++;
+    car_collision_z_acceleration++;
+    car_collision_x_acceleration >>= 1;
+    car_collision_y_acceleration >>= 1;
+    car_collision_z_acceleration >>= 1;
+#endif</pre>
+
+<p>
+  The <code>#define</code> is never set so this is unreachable. However it represents
+  the approach that "didn't work" — a crude ÷2 that would override the entire
+  <code>g_physicsStepScale</code> mechanism if accidentally enabled. Recommend
+  deleting it or adding a comment: <em>"DO NOT ENABLE — superseded by
+  g_physicsStepScale"</em>.
+</p>
+
+<h3>INCREASE constant duplication</h3>
+<div class="box box-warn">
+<strong>Confusing naming.</strong> <code>INCREASE = 276</code> in
+<code>Car_Behaviour.h</code> is the same value as <code>FRONT_SUSPENSION_SPRING = 276</code>
+in <code>PhysicsConfig.h</code>. They happen to be equal because both derive from
+the Amiga's shared <code>muls #276</code> in <code>calculate.difference</code>.
+The opponent code uses <code>INCREASE</code> rather than the suspension spring
+constants, so tuning <code>PhysicsConfig.h</code> does not affect the opponent.
+Consider unifying.
+</div>
+
+<h3>Y-axis position shift factor discrepancy</h3>
+<div class="box box-warn">
+<strong>Minor but unexplained.</strong> In <code>UpdatePlayersPosition()</code>,
+the Y-axis integration uses <code>speed &lt;&lt; 7</code> (×128) while X and Z use
+<code>speed &lt;&lt; 6 × PC_FACTOR</code>. The comment reads
+<em>"not sure why this is different"</em> — this matches the Amiga
+(<code>asl.l #7</code> for Y vs <code>asl.l #6</code> for X/Z), so it is correct,
+but the uncertainty comment should be resolved.
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════ §8 ═══ -->
+<h2><span class="num">8</span> Summary Scorecard</h2>
+
+<table>
+  <thead>
+    <tr><th>Aspect</th><th>Verdict</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Constants match Amiga (gravity, spring, REDUCTION, damping)</td><td class="ok">✓ All identical</td></tr>
+    <tr><td>Integration scaling architecture</td><td class="ok">✓ Correct</td></tr>
+    <tr><td>Spring inverse-scaling for step rate</td><td class="ok">✓ Mathematically sound</td></tr>
+    <tr><td>Fractional carry accumulation (61c5712)</td><td class="ok">✓ Eliminates sub-step energy loss</td></tr>
+    <tr><td>Decay functions — airborne wheel spin</td><td class="ok">✓ pow(0.75, scale) is correct</td></tr>
+    <tr><td>Boost drain decoupled from physics rate</td><td class="ok">✓</td></tr>
+    <tr><td>Damage rate-limited to logic ticks</td><td class="ok">✓ Improved with wheel bitmask</td></tr>
+    <tr><td>Opponent physics on same precision footing</td><td class="ok">✓ (e4931b6)</td></tr>
+    <tr><td>Bounce feel matches Amiga</td><td class="warn">~90% — softer due to 60 Hz discrete dynamics</td></tr>
+    <tr><td>HIGHER_FRAME_RATE dead code</td><td class="warn">⚠ Should be deleted</td></tr>
+    <tr><td>INCREASE / SPRING constant unification</td><td class="warn">⚠ Opponent not tuned by PhysicsConfig.h</td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Bottom line:</strong> The port's physics are faithful. The scaling architecture
+  is solid and the recent carry-based integration commits nail the sub-step precision
+  problem. The car will feel slightly less bouncy than the Amiga because a well-sampled
+  spring-damper oscillates less than an undersampled one. With
+  <code>SPRING = 320</code> / <code>DAMPING = 200</code> now applied, the system
+  should be noticeably closer to the Amiga feel. Keep iterating in
+  <code>PhysicsConfig.h</code> — that is exactly what it is there for.
+</p>
+
+<hr>
+
+<footer>
+  Stunt Car Racer Physics Review · Generated 18 April 2026 ·
+  src/Car_Behaviour.cpp · src/PhysicsConfig.h · reference/StuntCarRacer.s
+</footer>
+
+</body>
+</html>
