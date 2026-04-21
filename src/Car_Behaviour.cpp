@@ -556,7 +556,6 @@ extern long PlayersStartPiece;
 extern long StartLinePiece;
 extern long HalfALapPiece;
 extern bool bMultiplayerMode;
-extern bool g_swapSinglePlayerStartPositionsForRecordingMode;
 
 long INITIALISE_PLAYER = TRUE;
 
@@ -596,13 +595,9 @@ static void CarBehaviourActiveInstance(DWORD input, long* x, long* y, long* z, l
         if (reset_from_off_track) {
             PositionCarAbovePiece(player_current_piece);
         } else {
-            const bool useProvidedSpawnTransform =
-                bNewGame &&
-                ((bMultiplayerMode && (GetActiveCarBehaviourInstance() == 1)) ||
-                 (g_swapSinglePlayerStartPositionsForRecordingMode && !bMultiplayerMode &&
-                  (GetActiveCarBehaviourInstance() == 0)));
-            if (useProvidedSpawnTransform) {
-                // Use the supplied spawn transform instead of the default start-side placement.
+            if (bNewGame && bMultiplayerMode && (GetActiveCarBehaviourInstance() == 1)) {
+                // In 2-player mode, let player 2 start from the same spawn transform as
+                // the single-player opponent.
                 player_x = *x;
                 player_y = -(*y / LOCAL_Y_FACTOR);
                 player_z = *z;

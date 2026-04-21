@@ -8,10 +8,8 @@
 
 #include "platform_sdl_gl.h"
 
-#include <fstream>
 #include <iomanip>
 #include <sstream>
-#include <vector>
 
 #include "StuntCarRacer.h"
 #include "3D_Engine.h"
@@ -148,17 +146,6 @@ static int g_brakeSampleCount = 0;
 static int g_boostSampleCount = 0;
 static bool g_restartEngineAudioOnFirstInput = false;
 static float g_requestedScreenScale = 0.0f;
-static const char* kEnableInputRecordingEnvVar = "SCR_ENABLE_INPUT_RECORDING";
-static const char* kPlayerInputReplayPath = "player1_input_recording.bin";
-static const uint32_t kPlayerInputReplayMagic = 0x31524353; // "SCR1"
-static const uint32_t kPlayerInputReplayVersion = 1;
-static std::vector<DWORD> g_recordedPlayer1Inputs;
-static std::vector<DWORD> g_loadedPlayer1Inputs;
-static bool g_enableInputRecordingReplay = false;
-bool g_swapSinglePlayerStartPositionsForRecordingMode = false;
-static bool g_isRecordingPlayer1Input = false;
-static bool g_isReplayingPlayer2Input = false;
-static size_t g_player2ReplayCursor = 0;
 
 #ifdef USE_SDL2
 #define MAX_LOCAL_PLAYERS 8
@@ -198,10 +185,6 @@ static bool IsSplitScreenMode(void) {
     return bMultiplayerMode || bFauxMultiplayerMode;
 }
 
-static bool IsRecordingSinglePlayerModeActive(void) {
-    return g_enableInputRecordingReplay && !bMultiplayerMode && !bFauxMultiplayerMode;
-}
-
 static float GetPlayerCarRenderYOffset(void) {
     if (IsSplitScreenMode())
         return (VCAR_HEIGHT / 4.0f) + (VCAR_HEIGHT / 24.0f);
@@ -224,7 +207,6 @@ long VALUE1 = 1, VALUE2 = 2, VALUE3 = 3;
 extern long TrackID;
 extern long boostReserve, boostUnit, StandardBoost, SuperBoost;
 extern long INITIALISE_PLAYER;
-extern long opponentsID;
 extern bool raceFinished, raceWon;
 extern long lapNumber[];
 
@@ -293,17 +275,6 @@ static void ApplyWindowLayout(int windowWidth, int windowHeight, bool logLayout)
 static void RefreshCombinedInput(void);
 static void InitialiseBoostStartStateForRace(long reserve);
 static void DrawCenteredTextLine(TextHelper& txtHelper, const std::wstring& line, int y);
-static bool IsRecordingSinglePlayerModeActive(void);
-static void InitialiseInputRecordingFromEnvironment(void);
-static void LoadRecordedPlayer1InputFromDisk(void);
-static void SaveRecordedPlayer1InputToDisk(void);
-static void BeginPlayer1InputRecordingForRace(void);
-static void EndPlayer1InputRecordingForRace(void);
-static void BeginPlayer2ReplayForRaceIfAvailable(void);
-static void ResetPlayer2ReplayState(void);
-static void RecordPlayer1InputSample(DWORD input);
-static void ApplyPlayer2ReplayInputForCurrentStep(void);
-static void PrimeSinglePlayerPlayer1StartFromOpponentSpawn(void);
 
 #ifdef USE_SDL2
 static void ResetGamepadSlots(void);
@@ -992,28 +963,6 @@ static void PrimeMultiplayerPlayer2StartFromSinglePlayerOpponent(void) {
     bNewGame = savedNewGame;
 }
 
-static void PrimeSinglePlayerPlayer1StartFromOpponentSpawn(void) {
-    if (!IsRecordingSinglePlayerModeActive() || TrackID == NO_TRACK)
-        return;
-
-    const bool savedNewGame = bNewGame;
-    bNewGame = TRUE;
-
-    long spawnX = 0, spawnY = 0, spawnZ = 0;
-    float spawnXa = 0.0f, spawnYa = 0.0f, spawnZa = 0.0f;
-    OpponentBehaviour(&spawnX, &spawnY, &spawnZ, &spawnXa, &spawnYa, &spawnZa, true,
-                      static_cast<float>(g_physicsStepSeconds));
-
-    player1_x = spawnX;
-    player1_y = spawnY;
-    player1_z = spawnZ;
-    player1_x_angle = RadiansToPlayerAngle(spawnXa);
-    player1_y_angle = RadiansToPlayerAngle(spawnYa);
-    player1_z_angle = RadiansToPlayerAngle(spawnZa);
-
-    bNewGame = savedNewGame;
-}
-
 static void CapturePreviousCarState(void) {
     prev_player1_x = player1_x;
     prev_player1_y = player1_y;
@@ -1552,7 +1501,6 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
     txtHelper.DrawTextLine(L"  M, Select or Escape = Back to track menu");
 
     if (keyPress == STARTMENU) {
-        g_swapSinglePlayerStartPositionsForRecordingMode = IsRecordingSinglePlayerModeActive();
 #ifdef USE_SDL2
         if (bMultiplayerMode) {
             g_multiplayerPlayer1IsKeyboard = g_pendingMultiplayerStarterIsKeyboard;
@@ -1564,13 +1512,8 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
         g_pendingMultiplayerStarterIsKeyboard = false;
         g_pendingMultiplayerStarterInstanceId = -1;
 #endif
-        BeginPlayer1InputRecordingForRace();
-        BeginPlayer2ReplayForRaceIfAvailable();
         RestartEngineAudioBuffers(true);
-        PrimeSinglePlayerPlayer1StartFromOpponentSpawn();
         PrimeMultiplayerPlayer2StartFromSinglePlayerOpponent();
-        if (IsRecordingSinglePlayerModeActive())
-            opponentsID = NO_OPPONENT;
         bNewGame = TRUE;
         GameMode = GAME_IN_PROGRESS;
         g_restartEngineAudioOnFirstInput = true;
@@ -1772,133 +1715,6 @@ static void InitialiseBoostStartStateForRace(long reserve) {
         SetBoostStartStateForInstance(1, reserve);
 }
 
-static void InitialiseInputRecordingFromEnvironment(void) {
-    g_enableInputRecordingReplay = false;
-    g_swapSinglePlayerStartPositionsForRecordingMode = false;
-    const char* envValue = SDL_getenv(kEnableInputRecordingEnvVar);
-    if (envValue == NULL || envValue[0] == '\0')
-        return;
-
-    if ((strcmp(envValue, "1") == 0) || (strcmp(envValue, "true") == 0) || (strcmp(envValue, "TRUE") == 0) ||
-        (strcmp(envValue, "on") == 0) || (strcmp(envValue, "ON") == 0) || (strcmp(envValue, "yes") == 0) ||
-        (strcmp(envValue, "YES") == 0))
-        g_enableInputRecordingReplay = true;
-
-    printf("%s=%s (%s)\n", kEnableInputRecordingEnvVar, envValue,
-           g_enableInputRecordingReplay ? "input recording enabled" : "input recording disabled");
-}
-
-static void LoadRecordedPlayer1InputFromDisk(void) {
-    g_loadedPlayer1Inputs.clear();
-    if (!g_enableInputRecordingReplay)
-        return;
-
-    std::ifstream inputFile(kPlayerInputReplayPath, std::ios::binary);
-    if (!inputFile.is_open())
-        return;
-
-    uint32_t magic = 0;
-    uint32_t version = 0;
-    uint32_t sampleCount = 0;
-    inputFile.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    inputFile.read(reinterpret_cast<char*>(&version), sizeof(version));
-    inputFile.read(reinterpret_cast<char*>(&sampleCount), sizeof(sampleCount));
-    if (!inputFile.good())
-        return;
-    if (magic != kPlayerInputReplayMagic || version != kPlayerInputReplayVersion)
-        return;
-
-    g_loadedPlayer1Inputs.resize(static_cast<size_t>(sampleCount), 0);
-    if (sampleCount > 0) {
-        inputFile.read(reinterpret_cast<char*>(g_loadedPlayer1Inputs.data()),
-                       static_cast<std::streamsize>(sizeof(DWORD) * g_loadedPlayer1Inputs.size()));
-        if (!inputFile.good()) {
-            g_loadedPlayer1Inputs.clear();
-            return;
-        }
-    }
-
-    printf("Loaded %u recorded Player 1 input samples from %s\n", sampleCount, kPlayerInputReplayPath);
-}
-
-static void SaveRecordedPlayer1InputToDisk(void) {
-    if (!g_enableInputRecordingReplay)
-        return;
-    if (g_recordedPlayer1Inputs.empty())
-        return;
-
-    std::ofstream outputFile(kPlayerInputReplayPath, std::ios::binary | std::ios::trunc);
-    if (!outputFile.is_open()) {
-        printf("Failed to open %s for writing recorded Player 1 input\n", kPlayerInputReplayPath);
-        return;
-    }
-
-    const uint32_t magic = kPlayerInputReplayMagic;
-    const uint32_t version = kPlayerInputReplayVersion;
-    const uint32_t sampleCount = static_cast<uint32_t>(g_recordedPlayer1Inputs.size());
-    outputFile.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
-    outputFile.write(reinterpret_cast<const char*>(&version), sizeof(version));
-    outputFile.write(reinterpret_cast<const char*>(&sampleCount), sizeof(sampleCount));
-    outputFile.write(reinterpret_cast<const char*>(g_recordedPlayer1Inputs.data()),
-                     static_cast<std::streamsize>(sizeof(DWORD) * g_recordedPlayer1Inputs.size()));
-    if (!outputFile.good()) {
-        printf("Failed while writing recorded Player 1 input to %s\n", kPlayerInputReplayPath);
-        return;
-    }
-
-    g_loadedPlayer1Inputs = g_recordedPlayer1Inputs;
-    printf("Saved %u recorded Player 1 input samples to %s\n", sampleCount, kPlayerInputReplayPath);
-}
-
-static void BeginPlayer1InputRecordingForRace(void) {
-    if (!g_enableInputRecordingReplay)
-        return;
-    g_recordedPlayer1Inputs.clear();
-    g_isRecordingPlayer1Input = true;
-}
-
-static void EndPlayer1InputRecordingForRace(void) {
-    if (!g_isRecordingPlayer1Input)
-        return;
-    g_isRecordingPlayer1Input = false;
-    SaveRecordedPlayer1InputToDisk();
-}
-
-static void BeginPlayer2ReplayForRaceIfAvailable(void) {
-    if (!g_enableInputRecordingReplay) {
-        ResetPlayer2ReplayState();
-        return;
-    }
-    g_player2ReplayCursor = 0;
-    g_isReplayingPlayer2Input = bMultiplayerMode && !g_loadedPlayer1Inputs.empty();
-}
-
-static void ResetPlayer2ReplayState(void) {
-    g_isReplayingPlayer2Input = false;
-    g_player2ReplayCursor = 0;
-}
-
-static void RecordPlayer1InputSample(DWORD input) {
-    if (!g_enableInputRecordingReplay || !g_isRecordingPlayer1Input)
-        return;
-    g_recordedPlayer1Inputs.push_back(input);
-}
-
-static void ApplyPlayer2ReplayInputForCurrentStep(void) {
-    if (!g_enableInputRecordingReplay || !g_isReplayingPlayer2Input || !bMultiplayerMode)
-        return;
-#ifdef __EMSCRIPTEN__
-    if (g_webrtcGuestConnected)
-        return;
-#endif
-    if (g_player2ReplayCursor < g_loadedPlayer1Inputs.size()) {
-        g_player2Input = g_loadedPlayer1Inputs[g_player2ReplayCursor];
-        ++g_player2ReplayCursor;
-    } else {
-        g_player2Input = 0;
-    }
-}
-
 static void BeginLogicTickDamagePeriodForActiveCars(void) {
     {
         const long previousInstance = PushCarBehaviourInstance(0);
@@ -2064,8 +1880,7 @@ void RenderText(double fTime) {
         // Show car speed, damage and race details
         const SurfaceDesc* pd3dsdBackBuffer = GetBackBufferSurfaceDesc();
         // Output opponent's name for four seconds at race start (single-player and faux multiplayer only).
-        if (!bMultiplayerMode && !IsRecordingSinglePlayerModeActive() && ((GetTimeSeconds() - gameStartTime) < 4.0) &&
-            (opponentsID != NO_OPPONENT)) {
+        if (!bMultiplayerMode && ((GetTimeSeconds() - gameStartTime) < 4.0) && (opponentsID != NO_OPPONENT)) {
             std::wstring opponentName = opponentNames[opponentsID] ? opponentNames[opponentsID] : L"";
             while (!opponentName.empty() && opponentName.back() == L' ')
                 opponentName.pop_back();
@@ -2085,10 +1900,8 @@ void RenderText(double fTime) {
             txtHelper.SetInsertionPos(centeredX, static_cast<int>(pd3dsdBackBuffer->Height - 15 * 20 * textScale));
             txtHelper.DrawFormattedTextLine(opponentLabel);
         }
-        if (!IsSplitScreenMode()) {
-            const long opponentsDistance = IsRecordingSinglePlayerModeActive() ? 0 : CalculateOpponentsDistance();
-            DrawGameplayCockpitHudForInstance(txtHelper, 0, lapNumber[PLAYER], opponentsDistance);
-        }
+        if (!IsSplitScreenMode())
+            DrawGameplayCockpitHudForInstance(txtHelper, 0, lapNumber[PLAYER], CalculateOpponentsDistance());
 
         txtHelper.End();
 
@@ -2206,7 +2019,7 @@ static void PrepareInterpolatedShadowsForView(long viewedCarInstance, float alph
         return;
     }
 
-    if (!IsRecordingSinglePlayerModeActive() && viewedCarInstance != 1)
+    if (viewedCarInstance != 1)
         UpdateInterpolatedOpponentShadow(alpha);
 
     if (IsSplitScreenMode() && viewedCarInstance != 0)
@@ -2440,17 +2253,16 @@ void CALLBACK OnFrameRender(RenderDevice* pDevice, double fTime, float fElapsedT
                      render_backdrop_viewpoint_z_angle);
 
         PrepareInterpolatedShadowsForView(0, alpha);
-        const bool drawComputerCar = !IsRecordingSinglePlayerModeActive();
 
         // Render world geometry with split depth ranges for improved precision.
         SetPerspectiveDepthRange(pDevice, PERSPECTIVE_FAR_PASS_NEAR, PERSPECTIVE_FAR);
         DrawBackdropSkyDome3D(pDevice);
-        RenderWorldGeometry(pDevice, bOutsideView, drawComputerCar);
+        RenderWorldGeometry(pDevice, bOutsideView, true);
 
         // Clear depth and redraw near range so close geometry wins cleanly.
         V(pDevice->Clear(0, NULL, CLEAR_ZBUFFER, 0, 1.0f, 0));
         SetPerspectiveDepthRange(pDevice, PERSPECTIVE_NEAR, PERSPECTIVE_NEAR_PASS_FAR);
-        RenderWorldGeometry(pDevice, bOutsideView, drawComputerCar);
+        RenderWorldGeometry(pDevice, bOutsideView, true);
         }
 
         if ((GameMode == GAME_IN_PROGRESS) || (GameMode == GAME_OVER)) {
@@ -3159,10 +2971,6 @@ static bool RunFrame(double frameTime, bool allowQuit) {
     {
         static GameModeType s_prevGameMode = TRACK_MENU;
         const double interpolationResetDelta = 2.0 * g_physicsStepSeconds;  // e.g. ~2 physics steps
-        if (s_prevGameMode == GAME_IN_PROGRESS && GameMode != GAME_IN_PROGRESS) {
-            EndPlayer1InputRecordingForRace();
-            ResetPlayer2ReplayState();
-        }
         if (GameMode != s_prevGameMode || frameDelta > interpolationResetDelta) {
             have_prev_car_state = false;
             s_prevGameMode = GameMode;
@@ -3289,8 +3097,6 @@ static bool RunFrame(double frameTime, bool allowQuit) {
 
         // --- Input sampling (once per physics step) ---
         SampleControlsForLogicSubstep(lastInput);
-        if ((GameMode == GAME_IN_PROGRESS) && !bPaused && !bPlayerPaused)
-            RecordPlayer1InputSample(lastInput);
         QueueMultiplayerCarCollisionImpulsesForStep();
 
         // --- Body-dynamics integrator (once per physics step, decoupled from game logic) ---
@@ -3318,7 +3124,6 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                         bMultiplayerMode && (GameMode == GAME_IN_PROGRESS);
                     if (useMultiplayerCarBehaviourForOpponent) {
                         if (!bOpponentPaused || bNewGame) {
-                            ApplyPlayer2ReplayInputForCurrentStep();
                             long opponent_x_angle_units = RadiansToPlayerAngle(opponent_x_angle);
                             long opponent_y_angle_units = RadiansToPlayerAngle(opponent_y_angle);
                             long opponent_z_angle_units = RadiansToPlayerAngle(opponent_z_angle);
@@ -3333,18 +3138,13 @@ static bool RunFrame(double frameTime, bool allowQuit) {
                         if (bNewGame)
                             bNewGame = FALSE;
                     } else {
-                        if (IsRecordingSinglePlayerModeActive()) {
-                            if (bNewGame)
-                                bNewGame = FALSE;
-                        } else {
-                            OpponentBehaviour(&opponent_x, &opponent_y, &opponent_z, &opponent_x_angle,
-                                              &opponent_y_angle, &opponent_z_angle, bOpponentPaused,
-                                              (float)g_physicsStepSeconds);
-                            if (bFauxMultiplayerMode) {
-                                long opponentPiece = 0, opponentDistanceIntoSection = 0;
-                                GetOpponentRoadState(&opponentPiece, &opponentDistanceIntoSection);
-                                SetCarRoadStateForInstance(1, opponentPiece, opponentDistanceIntoSection);
-                            }
+                        OpponentBehaviour(&opponent_x, &opponent_y, &opponent_z, &opponent_x_angle,
+                                          &opponent_y_angle, &opponent_z_angle, bOpponentPaused,
+                                          (float)g_physicsStepSeconds);
+                        if (bFauxMultiplayerMode) {
+                            long opponentPiece = 0, opponentDistanceIntoSection = 0;
+                            GetOpponentRoadState(&opponentPiece, &opponentDistanceIntoSection);
+                            SetCarRoadStateForInstance(1, opponentPiece, opponentDistanceIntoSection);
                         }
                     }
                     if (GameMode == GAME_IN_PROGRESS) {
@@ -3485,15 +3285,13 @@ int main(int argc, const char** argv) {
     SDL_GameControllerEventState(SDL_ENABLE);
     OpenInitialGamepads();
 #endif
-    InitialiseInputRecordingFromEnvironment();
-    LoadRecordedPlayer1InputFromDisk();
 
     TTF_Init();
 
     // crude command line parameter reading
     int nomsaa = 0;
     int fullscreen = 0;
-    int desktop = 1;
+    int desktop = 0;
     int givehelp = 0;
     int customWidth = 0;
     int customHeight = 0;
@@ -3773,7 +3571,6 @@ int main(int argc, const char** argv) {
         run = RunFrame(GetTimeSeconds(), true);
     }
 #endif
-    EndPlayer1InputRecordingForRace();
     FreeData();
 
     CloseFonts();
