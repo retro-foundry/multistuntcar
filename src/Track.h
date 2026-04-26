@@ -44,7 +44,8 @@
 typedef enum {
     TRACK_PACK_CLASSIC = 0,
     TRACK_PACK_TNT = 1,
-    NUM_TRACK_PACKS = 2
+    TRACK_PACK_ORIGINAL = 2,
+    NUM_TRACK_PACKS = 3
 } TrackPack;
 
 /*    ===================== */
@@ -94,6 +95,7 @@ typedef struct {
 /*    ============================== */
 extern WCHAR* GetTrackName(long track);
 extern TrackPack GetTrackPack(void);
+extern long GetTrackPackTrackCount(TrackPack pack);
 extern long SetTrackPack(TrackPack pack);
 extern const WCHAR* GetTrackPackName(void);
 

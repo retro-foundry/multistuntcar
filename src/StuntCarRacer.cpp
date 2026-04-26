@@ -528,7 +528,7 @@ void GetScreenDimensions(long* screen_width, long* screen_height) {
 // Colours
 //--------------------------------------------------------------------------------------
 
-#define NUM_PALETTE_ENTRIES (42 + 6)
+#define NUM_PALETTE_ENTRIES (42 + 7)
 //#define    PALETTE_COMPONENT_BITS    (8)        // bits per colour r/g/b component
 
 static PALETTEENTRY SCPalette[NUM_PALETTE_ENTRIES] = {
@@ -588,6 +588,9 @@ static PALETTEENTRY SCPalette[NUM_PALETTE_ENTRIES] = {
     {0x00, 0x00, 0x55}, //19
     {0x33, 0x33, 0x77}, //20
     {0x99, 0x99, 0xdd}, //21
+
+    // extra track colour (original orange pack)
+    {0xff, 0x7a, 0x18}, // SCR_BASE_COLOUR+22
 };
 
 DWORD SCRGB(long colour_index) // return full RGB value
@@ -1309,6 +1312,46 @@ void CALLBACK OnFrameMove(RenderDevice* pDevice, double fTime, float fElapsedTim
 #define STARTMENU SDLK_RETURN
 #define LEAGUEMENU SDLK_l
 
+static long GetTotalTrackMenuSelections(void) {
+    long total = 0;
+    for (long pack = 0; pack < NUM_TRACK_PACKS; ++pack)
+        total += GetTrackPackTrackCount(static_cast<TrackPack>(pack));
+    return total;
+}
+
+static long GetTrackMenuSelection(TrackPack pack, long track) {
+    long selection = 0;
+    for (long p = 0; p < NUM_TRACK_PACKS; ++p) {
+        const TrackPack currentPack = static_cast<TrackPack>(p);
+        const long count = GetTrackPackTrackCount(currentPack);
+        if (currentPack == pack) {
+            if (track < 0)
+                track = 0;
+            if (track >= count)
+                track = count - 1;
+            return selection + track;
+        }
+        selection += count;
+    }
+    return 0;
+}
+
+static void ResolveTrackMenuSelection(long selection, TrackPack* pack, long* track) {
+    for (long p = 0; p < NUM_TRACK_PACKS; ++p) {
+        const TrackPack currentPack = static_cast<TrackPack>(p);
+        const long count = GetTrackPackTrackCount(currentPack);
+        if (selection < count) {
+            *pack = currentPack;
+            *track = selection;
+            return;
+        }
+        selection -= count;
+    }
+
+    *pack = TRACK_PACK_CLASSIC;
+    *track = 0;
+}
+
 static void HandleTrackMenu(TextHelper& txtHelper) {
     long track_number;
     float textScale = GetTextScale();
@@ -1341,7 +1384,7 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
         ss << L"Track Pack: " << GetTrackPackName();
         DrawCenteredTextLine(txtHelper, ss.str(), packY);
     }
-    DrawCenteredTextLine(txtHelper, L"Left/Right or D-pad = change track (Classic then TNT).  Enter or A = select.  Escape = quit.", bottomInfoY);
+    DrawCenteredTextLine(txtHelper, L"Left/Right or D-pad = change track.  Enter or A = select.  Escape = quit.", bottomInfoY);
     DrawCenteredTextLine(txtHelper, L"'L' to switch Super League On/Off", bottomInfoY + regularSize);
 
     const bool goPrev = (keyPress == SDLK_LEFT);
@@ -1352,20 +1395,21 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
         bool changed_pack = false;
 
         if (TrackID != NO_TRACK)
-            menuTrackSelection = static_cast<long>(GetTrackPack()) * NUM_TRACKS + TrackID;
+            menuTrackSelection = GetTrackMenuSelection(GetTrackPack(), TrackID);
 
         if (keyPress == LEAGUEMENU) {
             bSuperLeague = !bSuperLeague;
             track_number = TrackID;
             CreateCarVertexBuffer(GetRenderDevice()); // recreate car
         } else {
-            const long totalTracks = NUM_TRACKS * NUM_TRACK_PACKS;
+            const long totalTracks = GetTotalTrackMenuSelections();
             if (goNext)
                 menuTrackSelection = (menuTrackSelection + 1) % totalTracks;
             else
                 menuTrackSelection = (menuTrackSelection + totalTracks - 1) % totalTracks;
 
-            TrackPack desiredPack = (menuTrackSelection < NUM_TRACKS ? TRACK_PACK_CLASSIC : TRACK_PACK_TNT);
+            TrackPack desiredPack;
+            ResolveTrackMenuSelection(menuTrackSelection, &desiredPack, &track_number);
             if (desiredPack != previous_pack) {
                 if (!SetTrackPack(desiredPack)) {
 #if defined(DEBUG) || defined(_DEBUG)
@@ -1377,8 +1421,6 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
                 }
                 changed_pack = true;
             }
-
-            track_number = menuTrackSelection % NUM_TRACKS;
         }
 
         if (!ConvertAmigaTrack(track_number)) {

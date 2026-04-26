@@ -31,6 +31,7 @@ extern long VALUE1, VALUE2;
 #define DISTANT_OBJECT_BOUNDARY (0x18000000)
 
 #define SCR_BASE_COLOUR 26
+#define SCR_ORANGE_SIDE (SCR_BASE_COLOUR + 22)
 
 /*    =========== */
 /*    Global data */
@@ -647,12 +648,15 @@ static WCHAR kClassicTrackNames[NUM_TRACKS][32] = {L"Little Ramp", L"Stepping St
                                                    L"Ski Jump",    L"Draw Bridge",      L"High Jump", L"Roller Coaster"};
 static WCHAR kTntTrackNames[NUM_TRACKS][32] = {L"Dizzy Descent", L"Witty Way",      L"Crazy Caper",   L"Amazing Adept",
                                                L"Jerkily Jump",  L"Evilly Episode", L"Teasing Temper", L"Rat Race"};
-static const WCHAR* kTrackPackNames[NUM_TRACK_PACKS] = {L"Classic", L"TNT"};
+static WCHAR kOriginalTrackNames[NUM_TRACKS][32] = {L"Skyline Spiral"};
+static const WCHAR* kTrackPackNames[NUM_TRACK_PACKS] = {L"Classic", L"TNT", L"Original"};
+static const long kTrackPackTrackCounts[NUM_TRACK_PACKS] = {NUM_TRACKS, NUM_TRACKS, 1};
 
 static const WCHAR* kTrackResourceNames[NUM_TRACK_PACKS][NUM_TRACKS] = {
     {L"LittleRamp", L"SteppingStones", L"HumpBack", L"BigRamp", L"SkiJump", L"DrawBridge", L"HighJump", L"RollerCoaster"},
     {L"DizzyDescent", L"WittyWay", L"CrazyCaper", L"AmazingAdept", L"JerkilyJump", L"EvillyEpisode", L"TeasingTemper",
      L"RatRace"},
+    {L"SkylineSpiral"},
 };
 
 static const char* kTrackFilenames[NUM_TRACK_PACKS][NUM_TRACKS] = {
@@ -661,6 +665,7 @@ static const char* kTrackFilenames[NUM_TRACK_PACKS][NUM_TRACKS] = {
     {"data/Tracks/TNT/DizzyDescent.bin", "data/Tracks/TNT/WittyWay.bin", "data/Tracks/TNT/CrazyCaper.bin",
      "data/Tracks/TNT/AmazingAdept.bin", "data/Tracks/TNT/JerkilyJump.bin", "data/Tracks/TNT/EvillyEpisode.bin",
      "data/Tracks/TNT/TeasingTemper.bin", "data/Tracks/TNT/RatRace.bin"},
+    {"data/Tracks/Original/SkylineSpiral.bin"},
 };
 
 /*    ======================================================================================= */
@@ -670,14 +675,22 @@ static const char* kTrackFilenames[NUM_TRACK_PACKS][NUM_TRACKS] = {
 /*    ======================================================================================= */
 
 WCHAR* GetTrackName(long track) {
-    if ((track < 0) || (track >= NUM_TRACKS))
+    if ((track < 0) || (track >= GetTrackPackTrackCount(gTrackPack)))
         return (WCHAR*)L"Unknown";
     if (gTrackPack == TRACK_PACK_TNT)
         return kTntTrackNames[track];
+    if (gTrackPack == TRACK_PACK_ORIGINAL)
+        return kOriginalTrackNames[track];
     return kClassicTrackNames[track];
 }
 
 TrackPack GetTrackPack(void) { return gTrackPack; }
+
+long GetTrackPackTrackCount(TrackPack pack) {
+    if ((pack < TRACK_PACK_CLASSIC) || (pack >= NUM_TRACK_PACKS))
+        return 0;
+    return kTrackPackTrackCounts[pack];
+}
 
 long SetTrackPack(TrackPack pack) {
     if ((pack < TRACK_PACK_CLASSIC) || (pack >= NUM_TRACK_PACKS))
@@ -729,6 +742,7 @@ long ConvertAmigaTrack(long track) {
 
     BYTE roadColour, sidesColour;
     const bool useTntColourScheme = (gTrackPack == TRACK_PACK_TNT);
+    const bool useOriginalColourScheme = (gTrackPack == TRACK_PACK_ORIGINAL);
     if (first_time) {
         ConvertAmigaPieceData();
         first_time = FALSE;
@@ -796,7 +810,10 @@ long ConvertAmigaTrack(long track) {
         // TNT tracks use the greener colour set from SCR-TNT even in Standard league.
         if (piece & 1) {
             // odd numbered section (light)
-            if (bSuperLeague || useTntColourScheme) {
+            if (useOriginalColourScheme) {
+                roadColour = SCR_BASE_COLOUR + 2;
+                sidesColour = SCR_ORANGE_SIDE;
+            } else if (bSuperLeague || useTntColourScheme) {
                 roadColour = SCR_BASE_COLOUR + 17;
                 sidesColour = SCR_BASE_COLOUR + 16;
             } else {
@@ -805,7 +822,10 @@ long ConvertAmigaTrack(long track) {
             }
         } else {
             // even numbered section (dark)
-            if (bSuperLeague || useTntColourScheme) {
+            if (useOriginalColourScheme) {
+                roadColour = SCR_BASE_COLOUR + 1;
+                sidesColour = SCR_BASE_COLOUR + 15;
+            } else if (bSuperLeague || useTntColourScheme) {
                 roadColour = SCR_BASE_COLOUR + 18;
                 sidesColour = SCR_BASE_COLOUR + 15;
             } else {
@@ -2036,7 +2056,8 @@ static long CanLoadTrackPack(TrackPack pack) {
     if ((pack < TRACK_PACK_CLASSIC) || (pack >= NUM_TRACK_PACKS))
         return FALSE;
 
-    for (long i = 0; i < NUM_TRACKS; ++i) {
+    const long track_count = GetTrackPackTrackCount(pack);
+    for (long i = 0; i < track_count; ++i) {
         bool owned = false;
         void* buffer = GetTRACKResource(NULL, kTrackResourceNames[pack][i], kTrackFilenames[pack][i], &owned);
         if (buffer == NULL)
@@ -2057,12 +2078,13 @@ static long ReadAmigaTrackData(long track) {
     long i, j;
     short s;
 
-    if ((track < 0) || (track >= NUM_TRACKS))
+    if ((track < 0) || (track >= GetTrackPackTrackCount(gTrackPack)))
         return FALSE;
 
     // read all tracks on first call or after pack switch
     if (first_time || (loaded_pack != gTrackPack)) {
         TrackPack requested_pack = gTrackPack;
+        const long track_count = GetTrackPackTrackCount(requested_pack);
 
         for (i = 0; i < NUM_TRACKS; i++) {
             if (track_buffer_owned[i] && track_buffer_ptrs[i] != NULL)
@@ -2071,7 +2093,7 @@ static long ReadAmigaTrackData(long track) {
             track_buffer_owned[i] = false;
         }
 
-        for (i = 0; i < NUM_TRACKS; i++) {
+        for (i = 0; i < track_count; i++) {
             bool owned = false;
             buffer = (char*)GetTRACKResource(NULL, kTrackResourceNames[requested_pack][i], kTrackFilenames[requested_pack][i], &owned);
             if (buffer == NULL) {
