@@ -106,6 +106,13 @@ if(EMSCRIPTEN)
       COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_CURRENT_SOURCE_DIR}/package/icon256.png
         $<TARGET_FILE_DIR:stuntcarracer>/
+      COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_CURRENT_SOURCE_DIR}/package/controller-config.js
+        $<TARGET_FILE_DIR:stuntcarracer>/
+    )
+    set_property(TARGET stuntcarracer APPEND PROPERTY LINK_DEPENDS
+      ${CMAKE_CURRENT_SOURCE_DIR}/package/template.html
+      ${CMAKE_CURRENT_SOURCE_DIR}/package/controller-config.js
     )
   endif()
 else()

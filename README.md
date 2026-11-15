@@ -43,6 +43,16 @@ The web build supports 2-player over WebRTC: one tab hosts (runs the game and st
 
 To deploy your own signaling server on **Cloudflare Workers** (Durable Objects), see **[webrtc/muttistuntcarsignal/README.md](webrtc/muttistuntcarsignal/README.md)** for setup, `wrangler` commands, and how to point the game at your worker URL.
 
+## Browser controller setup
+
+Open **Controller setup** in the top-right overlay. Connect the controller and press a button if it does not appear, then select the device. For each action, click **Detect** and move the joystick or press its button, or choose an axis/button from the list. Assign all five actions, click **Apply controls**, and close the panel to play. The live readout shows the browser's axis values and pressed button numbers.
+
+For an Amiga joystick with a USB/Arduino adapter, bind left/right to steering, up to accelerate, down to brake, and fire to boost. Fire also confirms menus; left/right select tracks or the player mode. Controls are stored per device ID in this browser, including for remote multiplayer guests. **Reset and reload** removes that device's custom controls and restores the original mappings. Gamepad input is suspended while the panel is open.
+
+This supports adapters the browser exposes through the Gamepad API, even when SDL has no existing controller mapping. A device working in a browser gamepad tester confirms browser detection; it does not establish that SDL recognises its layout. No adapter-specific layout is assumed. Native builds continue to use SDL controller mappings, configurable through `SDL_GAMECONTROLLERCONFIG`.
+
+Run the binding regression checks with `node --test tools/test_controller_config.cjs`.
+
 ## TNT (YNY) Track Extraction Summary
 
 The hidden TNT 8-track pack is extracted from the `reference/SCR-TNT` binary with `tools/extract_tnt_tracks.py`.

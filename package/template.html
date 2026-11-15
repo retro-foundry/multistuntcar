@@ -199,6 +199,16 @@
         border: none;
       }
       .webrtc-overlay__volume-slider::-moz-range-thumb:hover { background: #fff; }
+      .controller-settings { color: #c9d1d9; margin-top: 12px; }
+      .webrtc-overlay { max-height: calc(100vh - 48px); overflow-y: auto; }
+      .controller-settings summary { cursor: pointer; }
+      .controller-settings label { display: block; margin-top: 10px; }
+      .controller-settings select { max-width: 100%; margin: 4px; }
+      .controller-settings button { margin: 4px; cursor: pointer; }
+      .controller-settings select, .controller-settings button {
+        color: #e6edf3; background: #242830; border: 1px solid #59616d; border-radius: 4px; padding: 4px;
+      }
+      .controller-settings pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
       body.webrtc-join-mode .webrtc-overlay .webrtc-overlay__link-row { display: none !important; }
       /* Remote multiplayer tip: centered at start, dismiss on any input */
       .remote-multiplayer-tip {
@@ -274,7 +284,18 @@
         <label class="webrtc-overlay__volume-label" for="webrtcVolume">Volume</label>
         <input type="range" id="webrtcVolume" class="webrtc-overlay__volume-slider" min="0" max="100" value="100" />
       </div>
+      <details class="controller-settings" id="controllerSettings">
+        <summary>Controller setup</summary>
+        <label>Device <select id="controllerDevice" aria-label="Controller device"></select></label>
+        <p id="controllerStatus" role="status"></p>
+        <div id="controllerBindings"></div>
+        <button type="button" id="controllerApply">Apply controls</button>
+        <button type="button" id="controllerReset">Reset and reload</button>
+        <pre id="controllerReadout" aria-label="Live controller inputs"></pre>
+        <p>Controls are saved in this browser. Close this panel to play.</p>
+      </details>
     </div>
+    <script src="controller-config.js"></script>
     <div class="remote-multiplayer-tip" id="remoteMultiplayerTip" aria-label="Remote multiplayer info">
       <div class="remote-multiplayer-tip__title">README</div>
       <div class="remote-multiplayer-tip__body">
@@ -660,6 +681,10 @@
                 if (k.has(' ') || k.has('Spacebar') || k.has('Shift')) d |= KEY_P1_BOOST;
                 var pads = guestInput.gamepads;
                 pads.forEach(function(p) {
+                    if (Number.isInteger(p.input)) {
+                        d |= p.input & 31;
+                        return;
+                    }
                     var ax = p.axes || [], bt = p.buttons || [];
                     if (axisAtMost(ax, 0, -0.15) || btnPressed(bt, 14)) d |= KEY_P1_LEFT;
                     if (axisAtLeast(ax, 0, 0.15) || btnPressed(bt, 15)) d |= KEY_P1_RIGHT;
@@ -762,7 +787,7 @@
                 }
                 if (msg.type === 'gamepad') {
                     if (typeof msg.index !== 'number') return;
-                    guestInput.gamepads.set(msg.index, { id: msg.id || '', axes: Array.isArray(msg.axes) ? msg.axes : [], buttons: Array.isArray(msg.buttons) ? msg.buttons : [] });
+                    guestInput.gamepads.set(msg.index, { id: msg.id || '', input: msg.input, axes: Array.isArray(msg.axes) ? msg.axes : [], buttons: Array.isArray(msg.buttons) ? msg.buttons : [] });
                     flushGuestInputToWasm();
                     return;
                 }
@@ -863,7 +888,7 @@
                     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Spacebar'].includes(e.key) || e.code === 'Space') e.preventDefault();
                 }, { passive: false });
                 function snapshotGamepad(gp) {
-                    return { type: 'gamepad', index: gp.index, id: gp.id, axes: (gp.axes || []).map(function(v) { return Math.round(v * 1000) / 1000; }), buttons: (gp.buttons || []).map(function(btn) { return { pressed: !!btn.pressed, touched: !!btn.touched, value: Math.round(btn.value * 1000) / 1000 }; }) };
+                    return { type: 'gamepad', index: gp.index, id: gp.id, input: window.StuntControllers.customInput(gp), axes: (gp.axes || []).map(function(v) { return Math.round(v * 1000) / 1000; }), buttons: (gp.buttons || []).map(function(btn) { return { pressed: !!btn.pressed, touched: !!btn.touched, value: Math.round(btn.value * 1000) / 1000 }; }) };
                 }
                 function guestTabVisible() {
                     return typeof document.visibilityState !== 'undefined' && document.visibilityState === 'visible';

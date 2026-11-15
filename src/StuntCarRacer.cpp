@@ -2410,8 +2410,15 @@ static DWORD BuildGamepadInputForPlayer(SDL_GameController* controller) {
 }
 
 static void RefreshGamepadInput(void) {
+#ifdef __EMSCRIPTEN__
+    const bool configuring = EM_ASM_INT({ return window.StuntControllers && window.StuntControllers.isConfiguring(); });
+#endif
     for (int i = 0; i < MAX_LOCAL_PLAYERS; ++i) {
         g_gamepadInput[i] = 0;
+#ifdef __EMSCRIPTEN__
+        if (configuring)
+            continue;
+#endif
         if (g_gamepadSlots[i].handle == NULL)
             continue;
         if (!SDL_GameControllerGetAttached(g_gamepadSlots[i].handle))
@@ -2505,6 +2512,26 @@ static void RefreshCombinedInput(void) {
 }
 
 static void HandleGamepadDeviceAdded(int deviceIndex) {
+    bool mappingConfigured = false;
+#ifdef __EMSCRIPTEN__
+    // Use the browser's explicitly configured bindings, including for unmapped HID adapters.
+    char guid[33];
+    SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(deviceIndex), guid, sizeof(guid));
+    const char* joystickName = SDL_JoystickNameForIndex(deviceIndex);
+    char* mapping = reinterpret_cast<char*>(EM_ASM_PTR({
+        if (!window.StuntControllers || !$0) return 0;
+        var mapping = window.StuntControllers.getSDLMapping(UTF8ToString($0), UTF8ToString($1));
+        return mapping ? stringToNewUTF8(mapping) : 0;
+    }, joystickName, guid));
+    if (mapping) {
+        if (SDL_GameControllerAddMapping(mapping) < 0) {
+            printf("Browser controller mapping failed: %s\n", SDL_GetError());
+            EM_ASM({ window.StuntControllers.mappingError(UTF8ToString($0)); }, SDL_GetError());
+        } else
+            mappingConfigured = true;
+        SDL_free(mapping);
+    }
+#endif
     if (!SDL_IsGameController(deviceIndex))
         return;
 
@@ -2512,10 +2539,24 @@ static void HandleGamepadDeviceAdded(int deviceIndex) {
     if (instanceId < 0)
         return;
 
-    if (FindGamepadSlotByInstance(instanceId) >= 0)
-        return;
-
-    const int slot = FindFreeGamepadSlot();
+    int slot = FindGamepadSlotByInstance(instanceId);
+    if (slot >= 0) {
+        if (!mappingConfigured)
+            return;
+        // SDL refreshes edits to an existing mapping, but a new per-device mapping
+        // does not replace the generic mapping on an already open controller.
+        char* activeMapping = SDL_GameControllerMapping(g_gamepadSlots[slot].handle);
+        char* deviceMapping = SDL_GameControllerMappingForDeviceIndex(deviceIndex);
+        const bool changed = !activeMapping || !deviceMapping || (strcmp(activeMapping, deviceMapping) != 0);
+        SDL_free(activeMapping);
+        SDL_free(deviceMapping);
+        if (!changed)
+            return;
+        SDL_GameControllerClose(g_gamepadSlots[slot].handle);
+        g_gamepadSlots[slot].handle = NULL;
+        g_gamepadInput[slot] = 0;
+    } else
+        slot = FindFreeGamepadSlot();
     if (slot < 0)
         return;
 
@@ -2631,6 +2672,14 @@ static void ApplyKeyboardInputForKey(UINT sdlKey, bool pressed) {
 }
 
 bool process_events() {
+#ifdef __EMSCRIPTEN__
+    static int controllerMappingRevision = 0;
+    const int revision = EM_ASM_INT({ return window.StuntControllers ? window.StuntControllers.revision() : 0; });
+    if (revision != controllerMappingRevision) {
+        controllerMappingRevision = revision;
+        OpenInitialGamepads();
+    }
+#endif
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -2862,6 +2911,12 @@ bool process_events() {
         case SDL_QUIT:
             return false;
 #ifdef USE_SDL2
+#ifdef __EMSCRIPTEN__
+        case SDL_JOYDEVICEADDED:
+            // Unmapped joysticks do not generate SDL_CONTROLLERDEVICEADDED.
+            HandleGamepadDeviceAdded(event.jdevice.which);
+            break;
+#endif
         case SDL_CONTROLLERDEVICEADDED:
             HandleGamepadDeviceAdded(event.cdevice.which);
             break;
@@ -2869,6 +2924,10 @@ bool process_events() {
             HandleGamepadDeviceRemoved(event.cdevice.which);
             break;
         case SDL_CONTROLLERBUTTONDOWN: {
+#ifdef __EMSCRIPTEN__
+            if (EM_ASM_INT({ return window.StuntControllers && window.StuntControllers.isConfiguring(); }))
+                break;
+#endif
             const Uint8 btn = event.cbutton.button;
             const SDL_JoystickID controllerInstanceId = event.cbutton.which;
             const bool inMenu = (GameMode == TRACK_MENU || GameMode == TRACK_PREVIEW || GameMode == GAME_OVER);
