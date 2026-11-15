@@ -22,6 +22,13 @@
 #include "wavefunctions.h"
 #include "Atlas.h"
 #include "version.h"
+#ifdef USE_SDL2
+#include "ControllerMappings.h"
+#ifndef __EMSCRIPTEN__
+#include "DesktopControllerConfig.h"
+static DesktopControllerConfig g_desktopControllers;
+#endif
+#endif
 
 #if defined(linux) && !defined(_WIN32)
 #include <unistd.h>
@@ -1399,6 +1406,10 @@ static void HandleTrackMenu(TextHelper& txtHelper) {
     }
     DrawCenteredTextLine(txtHelper, L"Left/Right or D-pad = change track.  Enter or A = select.  Escape = quit.", bottomInfoY);
     DrawCenteredTextLine(txtHelper, L"'L' to switch Super League On/Off", bottomInfoY + regularSize);
+#if defined(USE_SDL2) && !defined(__EMSCRIPTEN__)
+    DrawCenteredTextLine(txtHelper, L"F3 = Controller setup (including USB joystick adapters)",
+                         bottomInfoY + regularSize * 2);
+#endif
 
     const bool goPrev = (keyPress == SDLK_LEFT);
     const bool goNext = (keyPress == SDLK_RIGHT);
@@ -1548,6 +1559,9 @@ static void HandleTrackPreview(TextHelper& txtHelper) {
 #endif
     txtHelper.DrawTextLine(L"Gamepad controls :-");
     txtHelper.DrawTextLine(L"  Left stick/D-Pad = Steer, RT = Accelerate, LT or B = Brake, A/X/RB = Boost");
+#if defined(USE_SDL2) && !defined(__EMSCRIPTEN__)
+    txtHelper.DrawTextLine(L"  F3 = Controller setup (axes, hats or buttons)");
+#endif
     if (bMultiplayerMode)
         txtHelper.DrawTextLine(L"Multiplayer controls: Use gamepads or keyboard.");
     if (bFauxMultiplayerMode)
@@ -1871,6 +1885,48 @@ static void DrawCenteredTextLine(TextHelper& txtHelper, const std::wstring& line
 }
 
 void RenderText(double fTime) {
+#if defined(USE_SDL2) && !defined(__EMSCRIPTEN__)
+    if (g_desktopControllers.IsOpen()) {
+        GLfloat clearColour[4];
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColour);
+        glClearColor(0.04f, 0.05f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(clearColour[0], clearColour[1], clearColour[2], clearColour[3]);
+        const float scale = GetTextScale();
+        static TextHelper setupText(g_pFont, g_pSprite, 15);
+        setupText.SetDisplaySize(static_cast<int>(14 * scale));
+        setupText.Begin();
+        setupText.SetForegroundColor(glm::vec4(0.9f, 0.95f, 1.0f, 1.0f));
+        setupText.SetInsertionPos(static_cast<int>(20 * scale), static_cast<int>(20 * scale));
+        const int availableWidth = static_cast<int>(GetBackBufferSurfaceDesc()->Width - 40 * scale);
+        for (const std::string& line : g_desktopControllers.Lines()) {
+            wchar_t* wide = reinterpret_cast<wchar_t*>(
+                SDL_iconv_string("WCHAR_T", "UTF-8", line.c_str(), line.size() + 1));
+            if (wide) {
+                std::wstring remaining(wide);
+                SDL_free(wide);
+                if (remaining.empty())
+                    setupText.DrawTextLine(L"");
+                while (!remaining.empty()) {
+                    size_t count = remaining.size();
+                    while (count > 1 && setupText.MeasureTextWidth(remaining.substr(0, count).c_str()) > availableWidth)
+                        --count;
+                    if (count < remaining.size()) {
+                        const size_t space = remaining.rfind(L' ', count);
+                        if (space != std::wstring::npos && space > 0)
+                            count = space;
+                    }
+                    setupText.DrawTextLine(remaining.substr(0, count).c_str());
+                    remaining.erase(0, count);
+                    while (!remaining.empty() && remaining.front() == L' ')
+                        remaining.erase(0, 1);
+                }
+            }
+        }
+        setupText.End();
+        return;
+    }
+#endif
     // The helper object simply helps keep track of text position, and color
     // and then it calls pFont->DrawText( m_pSprite, strMsg, -1, &rc, DT_NOCLIP, m_clr );
     // If NULL is passed in as the sprite object, then it will work fine however the
@@ -2428,6 +2484,13 @@ static void RefreshGamepadInput(void) {
 }
 
 static void RefreshCombinedInput(void) {
+#ifndef __EMSCRIPTEN__
+    if (g_desktopControllers.IsOpen()) {
+        lastInput = 0;
+        g_player2Input = 0;
+        return;
+    }
+#endif
     RefreshGamepadInput();
     if (bMultiplayerMode) {
         DWORD player1Input = 0;
@@ -2512,7 +2575,6 @@ static void RefreshCombinedInput(void) {
 }
 
 static void HandleGamepadDeviceAdded(int deviceIndex) {
-    bool mappingConfigured = false;
 #ifdef __EMSCRIPTEN__
     // Use the browser's explicitly configured bindings, including for unmapped HID adapters.
     char guid[33];
@@ -2527,8 +2589,7 @@ static void HandleGamepadDeviceAdded(int deviceIndex) {
         if (SDL_GameControllerAddMapping(mapping) < 0) {
             printf("Browser controller mapping failed: %s\n", SDL_GetError());
             EM_ASM({ window.StuntControllers.mappingError(UTF8ToString($0)); }, SDL_GetError());
-        } else
-            mappingConfigured = true;
+        }
         SDL_free(mapping);
     }
 #endif
@@ -2540,35 +2601,25 @@ static void HandleGamepadDeviceAdded(int deviceIndex) {
         return;
 
     int slot = FindGamepadSlotByInstance(instanceId);
-    if (slot >= 0) {
-        if (!mappingConfigured)
-            return;
-        // SDL refreshes edits to an existing mapping, but a new per-device mapping
-        // does not replace the generic mapping on an already open controller.
-        char* activeMapping = SDL_GameControllerMapping(g_gamepadSlots[slot].handle);
-        char* deviceMapping = SDL_GameControllerMappingForDeviceIndex(deviceIndex);
-        const bool changed = !activeMapping || !deviceMapping || (strcmp(activeMapping, deviceMapping) != 0);
-        SDL_free(activeMapping);
-        SDL_free(deviceMapping);
-        if (!changed)
-            return;
-        SDL_GameControllerClose(g_gamepadSlots[slot].handle);
-        g_gamepadSlots[slot].handle = NULL;
-        g_gamepadInput[slot] = 0;
-    } else
+    if (slot < 0)
         slot = FindFreeGamepadSlot();
     if (slot < 0)
         return;
 
-    SDL_GameController* controller = SDL_GameControllerOpen(deviceIndex);
+    SDL_GameController* previous = g_gamepadSlots[slot].handle;
+    SDL_GameController* controller = OpenControllerWithCurrentMapping(deviceIndex, previous);
+    g_gamepadSlots[slot].handle = controller;
     if (controller == NULL) {
         printf("SDL gamepad open failed for device %d: %s\n", deviceIndex, SDL_GetError());
         return;
     }
 
     SDL_Joystick* joystick = SDL_GameControllerGetJoystick(controller);
-    g_gamepadSlots[slot].handle = controller;
     g_gamepadSlots[slot].instanceId = SDL_JoystickInstanceID(joystick);
+    g_gamepadInput[slot] = 0;
+
+    if (previous == controller)
+        return;
 
     const char* name = SDL_GameControllerName(controller);
     if (name == NULL)
@@ -2672,6 +2723,9 @@ static void ApplyKeyboardInputForKey(UINT sdlKey, bool pressed) {
 }
 
 bool process_events() {
+#if defined(USE_SDL2) && !defined(__EMSCRIPTEN__)
+    bool suppressSetupInput = g_desktopControllers.IsOpen();
+#endif
 #ifdef __EMSCRIPTEN__
     static int controllerMappingRevision = 0;
     const int revision = EM_ASM_INT({ return window.StuntControllers ? window.StuntControllers.revision() : 0; });
@@ -2682,6 +2736,21 @@ bool process_events() {
 #endif
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+#if defined(USE_SDL2) && !defined(__EMSCRIPTEN__)
+        if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F3 && !event.key.repeat &&
+            (GameMode == TRACK_MENU || GameMode == TRACK_PREVIEW)) {
+            g_desktopControllers.Toggle();
+            suppressSetupInput = true;
+            continue;
+        }
+        if (g_desktopControllers.HandleEvent(event)) {
+            suppressSetupInput = true;
+            continue;
+        }
+        if (suppressSetupInput && (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP ||
+                                   event.type == SDL_CONTROLLERBUTTONDOWN))
+            continue;
+#endif
         switch (event.type) {
         case SDL_KEYDOWN:
             keyPress = event.key.keysym.sym;
@@ -2911,12 +2980,10 @@ bool process_events() {
         case SDL_QUIT:
             return false;
 #ifdef USE_SDL2
-#ifdef __EMSCRIPTEN__
         case SDL_JOYDEVICEADDED:
             // Unmapped joysticks do not generate SDL_CONTROLLERDEVICEADDED.
             HandleGamepadDeviceAdded(event.jdevice.which);
             break;
-#endif
         case SDL_CONTROLLERDEVICEADDED:
             HandleGamepadDeviceAdded(event.cdevice.which);
             break;
@@ -2984,6 +3051,17 @@ bool process_events() {
 #endif
         }
     }
+#if defined(USE_SDL2) && !defined(__EMSCRIPTEN__)
+    if (suppressSetupInput) {
+        keyPress = 0;
+        g_keyboardInput = 0;
+    }
+    static unsigned int controllerRevision = 0;
+    if (controllerRevision != g_desktopControllers.Revision()) {
+        controllerRevision = g_desktopControllers.Revision();
+        OpenInitialGamepads();
+    }
+#endif
     RefreshCombinedInput();
     return true;
 }
@@ -3441,6 +3519,9 @@ int main(int argc, const char** argv) {
 
 #ifdef USE_SDL2
     ResetGamepadSlots();
+#ifndef __EMSCRIPTEN__
+    g_desktopControllers.Initialize();
+#endif
     SDL_GameControllerEventState(SDL_ENABLE);
     OpenInitialGamepads();
 #endif
@@ -3757,6 +3838,9 @@ int main(int argc, const char** argv) {
 
 #ifdef USE_SDL2
     CloseAllGamepads();
+#ifndef __EMSCRIPTEN__
+    g_desktopControllers.Close();
+#endif
 #endif
     if (IsAudioEnabled())
         sound_destroy();

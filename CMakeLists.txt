@@ -10,6 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(STUNT_ENABLE_WEB_ASSETS "Preload game assets when targeting Emscripten" ON)
 option(STUNT_FETCH_NATIVE_DEPS "Fetch SDL2/SDL2_ttf/glm from source for native builds" ON)
+option(STUNT_BUILD_TESTS "Build native SDL controller regression tests" OFF)
 
 set(SCR_SOURCES
   src/3D_Engine.cpp
@@ -17,6 +18,7 @@ set(SCR_SOURCES
   src/Backdrop.cpp
   src/Car.cpp
   src/Car_Behaviour.cpp
+  src/ControllerMappings.cpp
   src/Opponent_Behaviour.cpp
   src/platform_sdl_gl.cpp
   src/sound_sdl.cpp
@@ -201,6 +203,25 @@ set_target_properties(stuntcarracer PROPERTIES
 )
 
 if(NOT EMSCRIPTEN)
+  target_sources(stuntcarracer PRIVATE src/DesktopControllerConfig.cpp)
+
+  if(STUNT_BUILD_TESTS)
+    enable_testing()
+    add_executable(desktop_controller_tests
+      tools/test_desktop_controllers.cpp
+      src/DesktopControllerConfig.cpp
+      src/ControllerMappings.cpp
+    )
+    target_include_directories(desktop_controller_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(desktop_controller_tests PRIVATE SDL_MAIN_HANDLED)
+    if(TARGET SDL2::SDL2-static)
+      target_link_libraries(desktop_controller_tests PRIVATE SDL2::SDL2-static)
+    else()
+      target_link_libraries(desktop_controller_tests PRIVATE SDL2::SDL2)
+    endif()
+    add_test(NAME desktop_controllers COMMAND desktop_controller_tests)
+  endif()
+
   add_custom_target(
     copy_runtime_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
